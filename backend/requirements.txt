@@ -1,0 +1,36 @@
+# Klinik Backend — Python Dependencies
+
+# Core
+fastapi==0.115.0
+uvicorn[standard]==0.30.0
+pydantic==2.9.0
+pydantic-settings==2.5.0
+python-dotenv==1.0.1
+
+# LangGraph — Agent Orchestration
+langgraph==0.2.60
+langchain-core==0.3.30
+langchain-openai==0.2.14
+
+# LLM Client — OpenAI-compatible (works with vLLM, Ollama, OpenAI)
+openai>=1.35.0
+
+# Redis — Message Bus
+redis==5.2.0
+
+# LiveKit — Voice Infrastructure
+livekit>=0.17.6
+livekit-agents>=0.12.0
+
+# Twilio — SMS
+twilio==9.4.0
+
+# Database — Turso / libsql
+libsql-experimental==0.0.55
+
+# HTTP
+httpx==0.27.0
+
+# Utilities
+python-multipart==0.0.12
+prometheus-fastapi-instrumentator

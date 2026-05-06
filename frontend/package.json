@@ -1,0 +1,24 @@
+{
+    "name": "klinik-dashboard",
+    "private": true,
+    "version": "0.1.0",
+    "type": "module",
+    "scripts": {
+        "dev": "vite",
+        "build": "vite build",
+        "preview": "vite preview"
+    },
+    "dependencies": {
+        "@livekit/components-core": "^0.12.13",
+        "@livekit/components-react": "^2.9.20",
+        "@livekit/components-styles": "^1.2.0",
+        "livekit-client": "^2.18.8",
+        "react": "^18.3.1",
+        "react-dom": "^18.3.1",
+        "simli-client": "^3.0.1"
+    },
+    "devDependencies": {
+        "@vitejs/plugin-react": "^4.3.1",
+        "vite": "^5.4.0"
+    }
+}

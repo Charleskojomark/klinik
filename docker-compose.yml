@@ -1,0 +1,67 @@
+version: "3.9"
+
+services:
+  # ──────────────────────────────────────────────
+  # vLLM — LLM inference server (GPU profile only)
+  # ──────────────────────────────────────────────
+  vllm:
+    image: rocm/vllm:latest
+    ipc: host
+    ports:
+      - "8001:8000"
+    command: >
+      --model meta-llama/Llama-3.1-8B-Instruct
+      --tensor-parallel-size 1
+      --gpu-memory-utilization 0.90
+      --max-model-len 8192
+      --host 0.0.0.0
+      --port 8000
+    volumes:
+      - model_cache:/root/.cache/huggingface
+    environment:
+      - HUGGING_FACE_HUB_TOKEN=${HF_TOKEN:-}
+    profiles:
+      - gpu
+
+  # ──────────────────────────────────────────────
+  # Backend — FastAPI + LangGraph agents
+  # ──────────────────────────────────────────────
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    ports:
+      - "8080:8080"
+    env_file:
+      - .env
+    environment:
+      - REDIS_URL=${REDIS_URL}
+      - LIVEKIT_URL=${LIVEKIT_URL}
+      - LIVEKIT_API_KEY=${LIVEKIT_API_KEY}
+      - LIVEKIT_API_SECRET=${LIVEKIT_API_SECRET}
+    volumes:
+      - ./backend:/app
+      - ./data:/app/data
+
+  # ──────────────────────────────────────────────
+  # Frontend — React dashboard
+  # ──────────────────────────────────────────────
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      - VITE_API_URL=https://klinik.charlesmark.xyz/api
+      - VITE_LIVEKIT_URL=${LIVEKIT_URL}
+      - VITE_SIMLI_API_KEY=${SIMLI_API_KEY:-}
+      - VITE_SIMLI_FACE_ID=${SIMLI_FACE_ID:-afdb6a3e-3939-40aa-92df-01604c23101c}
+    depends_on:
+      - backend
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+
+volumes:
+  model_cache:
