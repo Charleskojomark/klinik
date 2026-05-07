@@ -192,6 +192,7 @@ export default function DoctorAvatar({ audioB64, videoUrl, summary, isSpeaking, 
             <div style={{ position:'absolute', inset:0, zIndex:1,
                           opacity: videoUrl ? 0 : 1,
                           transition: 'opacity 0.6s ease-in-out' }}>
+              <svg viewBox="0 0 80 80" width="160" height="160" xmlns="http://www.w3.org/2000/svg">
               <defs>
                 <radialGradient id="da-face" cx="48%" cy="42%" r="52%">
                   <stop offset="0%"   stopColor="#DDD6FE"/>
