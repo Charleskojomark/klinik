@@ -37,9 +37,9 @@ async def generate_tts_audio_b64(text: str) -> str:
     if not text or not text.strip():
         return ""
 
-    # aura-luna-en: warm, natural, human-sounding female voice — best for clinical AI
-    # Note: no encoding/sample_rate params — Deepgram TTS defaults to MP3 at 24kHz
-    url = "https://api.deepgram.com/v1/speak?model=aura-luna-en"
+    # aura-athena-en: British English female — authoritative, calm, professional
+    # Sounds like a senior medical consultant; ideal for clinical summaries
+    url = "https://api.deepgram.com/v1/speak?model=aura-athena-en"
     headers = {
         "Authorization": f"Token {settings.deepgram_api_key}",
         "Content-Type": "application/json",
