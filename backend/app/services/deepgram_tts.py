@@ -37,7 +37,8 @@ async def generate_tts_audio_b64(text: str) -> str:
     if not text or not text.strip():
         return ""
 
-    url = "https://api.deepgram.com/v1/speak?model=aura-asteria-en"
+    # aura-luna-en: warm, natural, human-sounding female voice — best for clinical AI
+    url = "https://api.deepgram.com/v1/speak?model=aura-luna-en&encoding=mp3&sample_rate=16000"
     headers = {
         "Authorization": f"Token {settings.deepgram_api_key}",
         "Content-Type": "application/json",

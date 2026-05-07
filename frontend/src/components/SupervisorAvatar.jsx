@@ -42,7 +42,7 @@ function silenceChunk(ms = 500, sr = 16000) {
   return new Uint8Array(new Int16Array(Math.floor(sr * ms / 1000)).buffer)
 }
 
-export default function SupervisorAvatar({ summary, isSpeaking, pcmBuffer, pcmDurationMs, onReady, onSummary, onSend }) {
+export default function SupervisorAvatar({ summary, isSpeaking, pcmBuffer, pcmDurationMs, onReady, onDone, onSummary, onSend }) {
   const [displayText, setDisplayText] = useState('')
   const [isTyping,    setIsTyping]    = useState(true)
   const [avatarReady, setAvatarReady] = useState(false)
@@ -99,14 +99,13 @@ export default function SupervisorAvatar({ summary, isSpeaking, pcmBuffer, pcmDu
 
     const sendNextChunk = () => {
       if (!clientRef.current || offset >= data.length) {
-        // All audio sent — keep-alive after speech ends
-        const remaining = Math.max(0, (durationRef.current || 5000) - cumulativeMs) + 1000
-        setTimeout(() => {
-          if (silenceIvRef.current) return
+        // All chunks sent — notify App that speech is done, start keepalive
+        onDone?.()
+        if (!silenceIvRef.current) {
           silenceIvRef.current = setInterval(() => {
             try { clientRef.current?.sendAudioData(silenceChunk()) } catch (_) {}
           }, 8000)
-        }, remaining)
+        }
         return
       }
       const chunk = data.slice(offset, offset + CHUNK_SIZE)
@@ -119,6 +118,7 @@ export default function SupervisorAvatar({ summary, isSpeaking, pcmBuffer, pcmDu
     onReady?.()
     sendNextChunk()
   }
+
 
 
   /* ── Simli WebRTC ── */

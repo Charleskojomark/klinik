@@ -145,6 +145,8 @@ export default function App() {
     }
   }, [phase, finalTx, interimTx])
   // ── Real SSE subscription ──
+  // Note: Audio no longer comes via SSE — it's inline in the POST response.
+  // SSE only drives agent status animations.
   const subscribeSSE = (sessionId) => {
     if (sseRef.current) sseRef.current.close()
     const es = new EventSource(`${API}/sessions/${sessionId}/events`)
@@ -152,31 +154,10 @@ export default function App() {
       try {
         const ev = JSON.parse(e.data)
         if (ev.agent_name && ev.status) {
-          const mapped = ev.status === 'running' ? 'working'
-            : ev.status === 'completed' ? 'done'
-            : ev.status === 'failed' ? 'error' : 'pending'
+          const mapped = ev.status === 'running'   ? 'working'
+                       : ev.status === 'completed' ? 'done'
+                       : ev.status === 'failed'    ? 'error' : 'pending'
           setAgentStatus(prev => ({ ...prev, [ev.agent_name]: mapped }))
-
-          // Handle background audio_ready event from TTS task
-          if (ev.agent_name === 'audio' && ev.status === 'ready' && ev.output) {
-            try {
-              const audioData = JSON.parse(ev.output)
-              if (audioData.supervisor_audio_b64) {
-                // Cancel browser TTS fallback — real Simli audio is arriving
-                clearTimeout(browserTtsTimerRef.current)
-                window.speechSynthesis?.cancel()
-
-                decodeMp3ToPcm(audioData.supervisor_audio_b64)
-                  .then(({ pcm, durationMs }) => {
-                    setPcmBuffer(pcm)
-                    setPcmDurationMs(durationMs)
-                    // Stop isSpeaking indicator after audio finishes
-                    setTimeout(() => setIsSpeaking(false), durationMs + 1500)
-                  })
-                  .catch(() => {})
-              }
-            } catch (_) {}
-          }
         }
       } catch {}
     }
@@ -185,9 +166,7 @@ export default function App() {
     return es
   }
 
-
   // ── Main consultation flow ──
-  const browserTtsTimerRef = useRef(null)
 
   const runConsultation = async (text) => {
     setPhase('processing')
@@ -220,8 +199,9 @@ export default function App() {
       const data = await res.json()
 
       fetchPatients()
-      // Audio arrives via SSE 'audio_ready' event when background TTS task finishes.
-      // Falls back to inline audio if backend provides it directly.
+
+      // Audio is inline in the response — decode immediately so avatar can
+      // start streaming PCM the instant Simli WebRTC connects.
       if (data.supervisor_audio_b64) {
         decodeMp3ToPcm(data.supervisor_audio_b64)
           .then(({ pcm, durationMs }) => {
@@ -230,7 +210,8 @@ export default function App() {
           })
           .catch(() => {})
       }
-      // Mark all done (catches any missed SSE events)
+
+      // Mark all agents done (catches any missed SSE events)
       const all = {}; AGENTS.forEach(a => { all[a.key] = 'done' })
       setAgentStatus(all)
       setPendingResult(data)
@@ -245,36 +226,17 @@ export default function App() {
     }
   }
 
-  // ── Transition to complete as soon as pendingResult is set. ──
-  // Audio sync fix: do NOT start browser TTS immediately — it would compete with Simli.
-  // Simli avatar handles speech; browser TTS is a silent fallback only after 10s timeout.
+  // ── Transition to complete as soon as pendingResult is set ──
+  // No browser TTS — Deepgram audio is always provided via response.
+  // The avatar streams it to Simli for lip-synced speech.
   useEffect(() => {
     if (!pendingResult) return
-
-    // Cancel any pending fallback TTS from a previous session
-    clearTimeout(browserTtsTimerRef.current)
     window.speechSynthesis?.cancel()
-
     setResult(pendingResult)
     setPendingResult(null)
     setPhase('complete')
     setIsSpeaking(true)
-
-    const summary = pendingResult.supervisor_summary || ''
-    const wordCount = summary.split(' ').length
-
-    if (pendingResult.supervisor_audio_b64) {
-      // Inline audio: Simli will play it, set speaking duration
-      setTimeout(() => setIsSpeaking(false), Math.max(5000, wordCount * 350))
-    } else {
-      // Async audio: wait up to 10s for Simli/Deepgram audio via SSE.
-      // Only fall back to browser TTS if nothing arrives (e.g. keys not configured).
-      browserTtsTimerRef.current = setTimeout(() => {
-        if (!pcmBuffer) {
-          speak(summary, () => setIsSpeaking(false))
-        }
-      }, 10000)
-    }
+    // isSpeaking is turned off by SupervisorAvatar after audio finishes
   }, [pendingResult])
 
   // ── Demo ──
@@ -354,20 +316,21 @@ export default function App() {
             {phase === 'processing' && (
               <AgentsScreen statuses={agentStatus} elapsed={elapsed} doneCount={doneCount} total={AGENTS.length} />
             )}
-            {/* Mount SupervisorAvatar from recording onwards for maximum pre-warm time */}
-            {(phase === 'recording' || phase === 'processing' || phase === 'complete') && (
-              <div style={{ display: phase === 'complete' ? 'block' : 'none' }}>
-                <SupervisorAvatar
-                  summary={result?.supervisor_summary || ''}
-                  isSpeaking={isSpeaking}
-                  pcmBuffer={pcmBuffer}
-                  pcmDurationMs={pcmDurationMs}
-                  onReady={() => setAriaReady(true)}
-                  onSummary={() => setPage('patients')}
-                  onSend={() => setPhase('chat')}
-                />
-              </div>
+            {/* Mount SupervisorAvatar ONLY when complete so WebRTC starts on a
+                visible element — pre-warming with display:none causes WebRTC failures */}
+            {phase === 'complete' && (
+              <SupervisorAvatar
+                summary={result?.supervisor_summary || ''}
+                isSpeaking={isSpeaking}
+                pcmBuffer={pcmBuffer}
+                pcmDurationMs={pcmDurationMs}
+                onReady={() => setAriaReady(true)}
+                onDone={() => setIsSpeaking(false)}
+                onSummary={() => setPage('patients')}
+                onSend={() => setPhase('chat')}
+              />
             )}
+
             {phase === 'chat' && (
               <ChatScreen
                 patient={activePatient}

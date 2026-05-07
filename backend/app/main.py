@@ -127,34 +127,9 @@ class ConsultationResponse(BaseModel):
     supervisor_simli_token: Optional[str] = None  # populated asynchronously via SSE
 
 
-# ──────────────────────────────────────────────
-# #6 fix — TTS + Simli as background tasks
-# ──────────────────────────────────────────────
+# (Background audio task removed — TTS is now generated synchronously
+#  and returned directly in the POST response for zero SSE roundtrip latency)
 
-async def _generate_and_publish_audio(session_id: str, summary: str):
-    """
-    Background task: generate TTS audio and Simli token, then publish
-    via the event bus so the frontend can pick them up without blocking
-    the initial HTTP response.
-    """
-    try:
-        from app.services.deepgram_tts import generate_tts_audio_b64
-        from app.services.simli_avatar import generate_simli_session_token
-
-        audio_b64 = await generate_tts_audio_b64(summary)
-        simli_token = await generate_simli_session_token(audio_b64) if audio_b64 else ""
-
-        event_bus = await get_event_bus()
-        await event_bus.publish_agent_event(
-            session_id, "audio", "ready",
-            output=json.dumps({
-                "supervisor_audio_b64": audio_b64,
-                "supervisor_simli_token": simli_token,
-            }),
-        )
-        logger.info(f"🔊 Audio published for session {session_id}")
-    except Exception as e:
-        logger.error(f"Background audio generation failed: {e}")
 
 
 # ──────────────────────────────────────────────
@@ -177,12 +152,13 @@ async def health():
 
 
 @app.post("/api/consultation", response_model=ConsultationResponse)
-async def start_consultation(req: ConsultationRequest, background_tasks: BackgroundTasks):
+async def start_consultation(req: ConsultationRequest):
     """
-    Executes the multi-agent clinical workflow based on the transcript.
-    Returns immediately after the workflow completes.
-    TTS and Simli avatar are generated in a background task and delivered via SSE.
+    Executes the multi-agent clinical workflow, then generates TTS audio.
+    Audio is returned directly in the response (no SSE roundtrip needed).
     """
+    from app.services.deepgram_tts import generate_tts_audio_b64
+
     session_id = req.session_id if req.session_id else f"session-{uuid.uuid4().hex[:8]}"
     logger.info(f"📋 New consultation: {session_id}")
 
@@ -200,7 +176,6 @@ async def start_consultation(req: ConsultationRequest, background_tasks: Backgro
     event_bus = await get_event_bus()
     await event_bus.publish_agent_event(session_id, "workflow", "running", output="Workflow started")
 
-    # #14 fix — timeout guard: 120s max for the full multi-agent pipeline
     try:
         result = await asyncio.wait_for(
             run_clinical_workflow(clinical_state),
@@ -217,8 +192,14 @@ async def start_consultation(req: ConsultationRequest, background_tasks: Backgro
     except Exception as e:
         logger.error(f"Failed to persist session {session_id}: {e}")
 
-    # #6 fix — fire TTS + Simli in background; don't block the HTTP response
-    background_tasks.add_task(_generate_and_publish_audio, session_id, result.supervisor_summary)
+    # Generate TTS synchronously — audio travels with the HTTP response,
+    # no SSE polling roundtrip needed. Deepgram latency is ~150ms.
+    audio_b64 = ""
+    try:
+        audio_b64 = await generate_tts_audio_b64(result.supervisor_summary)
+        logger.info(f"🔊 Deepgram audio included in response for {session_id}")
+    except Exception as e:
+        logger.warning(f"TTS failed, response will have no audio: {e}")
 
     await event_bus.publish_agent_event(
         session_id, "workflow", "completed", output=result.supervisor_summary
@@ -228,8 +209,8 @@ async def start_consultation(req: ConsultationRequest, background_tasks: Backgro
         session_id=session_id,
         supervisor_summary=result.supervisor_summary,
         state=result,
-        supervisor_audio_b64=None,   # will arrive via SSE 'audio ready' event
-        supervisor_simli_token=None, # will arrive via SSE 'audio ready' event
+        supervisor_audio_b64=audio_b64 or None,
+        supervisor_simli_token=None,
     )
 
 
