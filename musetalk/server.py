@@ -32,8 +32,10 @@ AVATAR_PATH   = Path("/musetalk/data/aria_avatar.jpg")
 OUTPUT_DIR    = Path("/musetalk/videos")
 MODELS_DIR    = Path("/musetalk/models")
 MUSETALK_ROOT = Path("/musetalk")
-UNET_MODEL    = MODELS_DIR / "musetalkV15" / "unet.pth"
-UNET_CONFIG   = MODELS_DIR / "musetalkV15" / "musetalk.json"
+
+# snapshot_download nests repo dirs: models/musetalkV15/musetalkV15/unet.pth
+UNET_MODEL    = MODELS_DIR / "musetalkV15" / "musetalkV15" / "unet.pth"
+UNET_CONFIG   = MODELS_DIR / "musetalkV15" / "musetalkV15" / "musetalk.json"
 
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
