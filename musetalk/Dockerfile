@@ -36,16 +36,12 @@ RUN pip install --no-cache-dir opencv-python-headless
 # onnxruntime for DWPose face detection (CPU backend, no CUDA/HIP needed)
 RUN pip install --no-cache-dir onnxruntime
 
-# mmcv ecosystem — CPU-only build (avoids HIP extension compile)
-# Note: openmim pulls openxlab which downgrades setuptools to 60.2 (Python 3.12 incompatible)
-#       Force-reinstall setuptools>=70 after openmim, before calling mim.
-RUN pip install --no-cache-dir openmim && \
-    pip install --no-cache-dir --force-reinstall "setuptools>=70" && \
-    mim install "mmengine>=0.7.0" && \
-    pip install --no-cache-dir "mmcv==2.0.1" \
-        -f https://download.openmmlab.com/mmcv/dist/cpu/torch2.0/index.html && \
-    mim install "mmdet==3.1.0" && \
-    mim install "mmpose==1.1.0"
+# mmcv ecosystem — skip openmim entirely (broken on Python 3.12).
+# mim is just a pip wrapper — install packages directly instead.
+# MMCV_WITH_OPS=0 = pure-Python build, no CUDA/ROCm extensions needed.
+RUN pip install --no-cache-dir mmengine && \
+    MMCV_WITH_OPS=0 pip install --no-cache-dir "mmcv>=2.0.0" && \
+    pip install --no-cache-dir "mmdet>=3.0.0" "mmpose>=1.0.0"
 
 # Remaining MuseTalk requirements (skip failures gracefully)
 RUN pip install --no-cache-dir -r requirements.txt || true
