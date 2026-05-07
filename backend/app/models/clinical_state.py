@@ -92,6 +92,7 @@ class Referral(BaseModel):
     urgency: Urgency = Urgency.ROUTINE
     reason: str = ""
     referral_letter: str = ""
+    clinical_summary: Optional[str] = None   # LLM sometimes includes this field
 
 
 class FollowUp(BaseModel):

@@ -90,15 +90,18 @@ export default function App() {
   const recRef   = useRef(null)
   const timerRef = useRef(null)
   const sseRef   = useRef(null)
+  const phaseRef = useRef('idle')
+  useEffect(() => { phaseRef.current = phase }, [phase])
 
   // ── Speech Recognition setup ──
   useEffect(() => {
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition
     if (!SR) { setSrError('Speech recognition not supported. Use Chrome or Edge.'); return }
     const rec = new SR()
-    rec.continuous    = true
+    rec.continuous     = true
     rec.interimResults = true
-    rec.lang          = 'en-US'
+    rec.lang           = 'en-US'
+
     rec.onresult = (e) => {
       let fin = '', inter = ''
       for (let i = 0; i < e.results.length; i++) {
@@ -108,11 +111,28 @@ export default function App() {
       setFinalTx(fin)
       setInterimTx(inter)
     }
-    rec.onerror = (e) => { if (e.error !== 'aborted') setSrError(`Mic error: ${e.error}`) }
+
+    // Auto-restart on mobile: browsers stop recognition after silence or timeout.
+    // Only restart if still in recording phase — prevents loops after user stops.
+    rec.onend = () => {
+      if (phaseRef.current === 'recording') {
+        try { rec.start() } catch (_) {}
+      }
+    }
+
+    rec.onerror = (e) => {
+      if (e.error === 'no-speech') {
+        // Normal on mobile after silence — just let onend restart it
+        return
+      }
+      if (e.error === 'aborted') return
+      setSrError(`Mic error: ${e.error}`)
+    }
+
     recRef.current = rec
-    // preload voices
     window.speechSynthesis?.getVoices()
   }, [])
+
 
   // ── Elapsed timer ──
   useEffect(() => {
