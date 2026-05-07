@@ -91,10 +91,10 @@ async def save_clinical_state(state) -> None:
             VALUES (?, ?, ?, ?, ?, ?)
         """, (
             state.patient.patient_id,
-            state.patient.name,
+            state.patient.name or "Unknown Patient",
             state.patient.age,
-            state.patient.sex,
-            state.patient.phone,
+            state.patient.sex or "Unknown",
+            state.patient.phone or "",
             datetime.utcnow().isoformat(),
         ))
 
@@ -108,7 +108,7 @@ async def save_clinical_state(state) -> None:
         """, (
             state.session_id,
             state.patient.patient_id,
-            state.patient.name,
+            state.patient.name or "Unknown Patient",
             state.doctor_id,
             state.transcript,
             state.supervisor_summary,
