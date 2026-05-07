@@ -43,7 +43,7 @@ async def _get_conn():
 
 
 async def init_db():
-    """Create tables if they don't exist."""
+    """Create tables if they don't exist. Also runs safe migrations for older schemas."""
     conn = await _get_conn()
     try:
         conn.execute("""
@@ -76,9 +76,25 @@ async def init_db():
             )
         """)
         conn.commit()
+
+        # Safe migrations — add columns that may be missing from older schema versions
+        _safe_add_column(conn, "encounters", "patient_name", "TEXT")
+        _safe_add_column(conn, "patients",   "phone",        "TEXT")
+
         logger.info("🗄️  Database tables ready")
     except Exception as e:
         logger.error(f"DB init error: {e}")
+
+
+def _safe_add_column(conn, table: str, column: str, col_type: str):
+    """Add a column to a table if it doesn't already exist (idempotent migration)."""
+    try:
+        conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {col_type}")
+        conn.commit()
+        logger.info(f"🗄️  Migrated: added {table}.{column}")
+    except Exception:
+        pass  # Column already exists — safe to ignore
+
 
 
 async def save_clinical_state(state) -> None:

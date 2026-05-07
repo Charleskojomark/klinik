@@ -237,20 +237,28 @@ export default function App() {
     }
   }
 
-  // ── When BOTH result and Aria are ready → show complete screen ──
+  // ── When result is ready → show complete screen immediately.
+  // ariaReady (Simli connected) is a bonus enhancement, not a blocker.
+  // Audio arrives async via SSE, avatar will speak when pcmBuffer is set.
   useEffect(() => {
-    if (!pendingResult || !ariaReady) return
+    if (!pendingResult) return
+
+    // Transition immediately — don't wait for Simli WebRTC to connect
     setResult(pendingResult)
     setPendingResult(null)
     setPhase('complete')
     setIsSpeaking(true)
+
+    // If audio was already pre-decoded (inline response), use it
+    // Otherwise audio arrives via SSE audio_ready event
     if (pendingResult.supervisor_audio_b64) {
       const wordCount = (pendingResult.supervisor_summary || '').split(' ').length
       setTimeout(() => setIsSpeaking(false), Math.max(5000, wordCount * 350))
     } else {
+      // Fallback to browser TTS while waiting for Deepgram audio via SSE
       speak(pendingResult.supervisor_summary, () => setIsSpeaking(false))
     }
-  }, [pendingResult, ariaReady])
+  }, [pendingResult])
 
   // ── Demo ──
   const runDemo = async () => {
