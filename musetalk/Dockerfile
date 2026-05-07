@@ -1,6 +1,6 @@
 # ── MuseTalk Service Dockerfile ──────────────────────────────────
-# Uses AMD ROCm PyTorch base image for MI300X GPU
-FROM rocm/pytorch:latest
+# Python 3.10 image — eliminates all setuptools/pkg_resources issues
+FROM rocm/pytorch:rocm6.1_ubuntu22.04_py3.10_pytorch_2.4
 
 ENV DEBIAN_FRONTEND=noninteractive
 ENV HSA_OVERRIDE_GFX_VERSION=11.0.0
@@ -36,12 +36,11 @@ RUN pip install --no-cache-dir opencv-python-headless
 # onnxruntime for DWPose face detection (CPU backend, no CUDA/HIP needed)
 RUN pip install --no-cache-dir onnxruntime
 
-# mmcv ecosystem — skip openmim entirely (broken on Python 3.12).
-# mim is just a pip wrapper — install packages directly instead.
-# MMCV_WITH_OPS=0 = pure-Python build, no CUDA/ROCm extensions needed.
-RUN pip install --no-cache-dir mmengine && \
-    MMCV_WITH_OPS=0 pip install --no-cache-dir "mmcv>=2.0.0" && \
-    pip install --no-cache-dir "mmdet>=3.0.0" "mmpose>=1.0.0"
+# mmcv ecosystem — py3.10 wheels exist for these exact versions
+RUN pip install --no-cache-dir setuptools wheel && \
+    pip install --no-cache-dir mmengine && \
+    MMCV_WITH_OPS=0 pip install --no-cache-dir "mmcv==2.1.0" && \
+    pip install --no-cache-dir "mmdet==3.3.0" "mmpose==1.3.2"
 
 # Remaining MuseTalk requirements (skip failures gracefully)
 RUN pip install --no-cache-dir -r requirements.txt || true
