@@ -35,17 +35,13 @@ class KlinikVoiceWorker:
         """
         logger.info(f"🎙️ Doctor joined room: {ctx.room.name}")
 
-        # Setup TTS (We use OpenAI's TTS via LiveKit Cloud Inference or API Key)
-        # We will use this to generate audio for Simli to lip-sync
         tts_plugin = openai.TTS()
 
-        # Build the agent session
         session = AgentSession(
             tts=tts_plugin,
         )
 
         simli_avatar = None
-        # Setup Simli Avatar (if configured)
         if self.settings.simli_api_key and self.settings.simli_face_id:
             try:
                 from livekit.plugins import simli
@@ -57,8 +53,6 @@ class KlinikVoiceWorker:
                     ),
                     avatar_participant_name="supervisor",
                 )
-
-                # Start avatar in the room
                 await simli_avatar.start(session, room=ctx.room)
                 logger.info("🤖 Simli avatar joined the room")
             except ImportError:
@@ -66,40 +60,40 @@ class KlinikVoiceWorker:
             except Exception as e:
                 logger.error(f"Simli avatar failed to start: {e}")
 
-        # Start a background task to listen for the LangGraph completion event
         asyncio.create_task(self.listen_for_completion_and_speak(session, ctx.room.name))
-
         return session
 
     async def listen_for_completion_and_speak(self, session: AgentSession, room_name: str):
         """
-        Listen to Redis for the 'workflow completed' event.
+        Listen to the event bus for the 'workflow completed' event.
         When received, use the AgentSession TTS to speak the summary.
-        Simli will automatically capture this audio and animate the avatar!
+        Simli will automatically capture this audio and animate the avatar.
         """
         try:
             event_bus = await get_event_bus()
             logger.info("👂 LiveKit Worker listening for completion events...")
-            
-            # Since we don't have the exact session_id here, we listen to all events
-            # In a real app, you would pass the session_id as room metadata
-            pubsub = event_bus.redis.pubsub()
+
+            # Use the EventBus public Redis client via the internal attribute.
+            # Falls back gracefully if Redis is not connected.
+            redis_client = event_bus._redis  # type: ignore[attr-defined]
+
+            if redis_client is None:
+                logger.warning("Redis not available — LiveKit worker cannot listen for events")
+                return
+
+            pubsub = redis_client.pubsub()
             await pubsub.subscribe("klinik-agent-events")
 
             async for message in pubsub.listen():
                 if message["type"] == "message":
-                    import json
                     try:
-                        data = json.loads(message["data"])
-                        # If the workflow is completed, grab the summary and speak it
+                        data = __import__("json").loads(message["data"])
                         if data.get("agent") == "workflow" and data.get("status") == "completed":
                             summary = data.get("output", "")
                             if summary:
                                 logger.info(f"🗣️ Triggering Avatar Speech: {summary[:50]}...")
-                                # Make the agent say the summary
-                                # The session will route this text -> TTS -> Simli Avatar -> Room
                                 await session.say(summary)
-                    except json.JSONDecodeError:
+                    except Exception:
                         pass
         except Exception as e:
             logger.error(f"Error in Redis listener task: {e}")
@@ -117,8 +111,7 @@ async def entrypoint(ctx: JobContext):
     await ctx.connect()
     logger.info(f"🏥 Klinik supervisor agent ready in room: {ctx.room.name}")
     session = await worker.create_agent_session(ctx)
-    
-    # Say a greeting when the room opens
+
     await session.say("Klinik system active. Waiting for consultation.")
 
 if __name__ == "__main__":

@@ -51,6 +51,7 @@ async def run_relationship_agent(state: ClinicalState) -> ClinicalState:
             system_prompt=SYSTEM_PROMPT,
             user_message=context,
             temperature=0.5,
+            max_tokens=192,   # SMS message — max 320 chars
             json_mode=True,
         )
 
@@ -90,19 +91,24 @@ async def run_relationship_agent(state: ClinicalState) -> ClinicalState:
 
 
 async def _send_twilio_sms(sms: SMSMessage, settings):
-    """Send an SMS via Twilio REST API."""
+    """Send an SMS via Twilio REST API (non-blocking via asyncio.to_thread)."""
+    import asyncio
     from twilio.rest import Client
 
-    try:
+    def _send():
         client = Client(settings.twilio_account_sid, settings.twilio_auth_token)
-        message = client.messages.create(
+        return client.messages.create(
             body=sms.body,
             from_=settings.twilio_from_number,
             to=sms.to_number,
         )
+
+    try:
+        message = await asyncio.to_thread(_send)
         sms.sent = True
         from datetime import datetime
         sms.sent_at = datetime.utcnow()
         logger.info(f"[{AGENT_NAME}] SMS sent: {message.sid}")
     except Exception as e:
         logger.error(f"[{AGENT_NAME}] Twilio SMS failed: {e}")
+

@@ -33,4 +33,4 @@ Thumbs.db
 *.log
 
 # Model cache
-models/
+/models/

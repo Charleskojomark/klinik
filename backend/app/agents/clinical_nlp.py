@@ -90,6 +90,7 @@ async def run_clinical_nlp_agent(state: ClinicalState) -> ClinicalState:
             system_prompt=SYSTEM_PROMPT,
             user_message=f"Doctor's transcript:\n\n{state.transcript}",
             temperature=0.1,
+            max_tokens=1024,  # structured JSON output — 2048 was excessive
             json_mode=True,
         )
 

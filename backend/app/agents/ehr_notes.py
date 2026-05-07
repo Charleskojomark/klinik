@@ -44,6 +44,7 @@ async def run_ehr_notes_agent(state: ClinicalState) -> ClinicalState:
             system_prompt=SYSTEM_PROMPT,
             user_message=clinical_context,
             temperature=0.2,
+            max_tokens=512,   # SOAP note — 4 short fields
             json_mode=True,
         )
 

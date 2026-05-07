@@ -47,6 +47,7 @@ async def run_billing_coding_agent(state: ClinicalState) -> ClinicalState:
             system_prompt=SYSTEM_PROMPT,
             user_message=context,
             temperature=0.1,
+            max_tokens=256,   # ICD-10/CPT codes JSON — very short output
             json_mode=True,
         )
 

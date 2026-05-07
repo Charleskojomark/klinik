@@ -156,6 +156,21 @@ export default function App() {
             : ev.status === 'completed' ? 'done'
             : ev.status === 'failed' ? 'error' : 'pending'
           setAgentStatus(prev => ({ ...prev, [ev.agent_name]: mapped }))
+
+          // #11 / #6 fix: handle background audio_ready event from TTS task
+          if (ev.agent_name === 'audio' && ev.status === 'ready' && ev.output) {
+            try {
+              const audioData = JSON.parse(ev.output)
+              if (audioData.supervisor_audio_b64) {
+                decodeMp3ToPcm(audioData.supervisor_audio_b64)
+                  .then(({ pcm, durationMs }) => {
+                    setPcmBuffer(pcm)
+                    setPcmDurationMs(durationMs)
+                  })
+                  .catch(() => {})
+              }
+            } catch (_) {}
+          }
         }
       } catch {}
     }
@@ -176,8 +191,9 @@ export default function App() {
     const init = {}; AGENTS.forEach(a => { init[a.key] = 'pending' })
     setAgentStatus(init)
 
+    // Generate session_id client-side and send in body so backend uses the same one.
+    // SSE subscription is opened AFTER the POST returns to use the confirmed session_id.
     const sessionId = `session-${crypto.randomUUID().slice(0,8)}`
-    subscribeSSE(sessionId)
 
     try {
       const res = await fetch(`${API}/consultation`, {
@@ -192,10 +208,15 @@ export default function App() {
       if (!res.ok) throw new Error('API error')
       const data = await res.json()
 
+      // #11 fix: subscribe SSE AFTER the POST confirms the session_id.
+      // The event_bus in-process log replays any events already published mid-workflow.
+      subscribeSSE(data.session_id || sessionId)
+
       const all = {}; AGENTS.forEach(a => { all[a.key] = 'done' })
       setAgentStatus(all)
       fetchPatients()
-      // Pre-decode audio immediately so PCM is ready the instant Aria connects
+      // Audio arrives via SSE 'audio_ready' event when background TTS task finishes.
+      // Falls back to inline audio if backend provides it directly.
       if (data.supervisor_audio_b64) {
         decodeMp3ToPcm(data.supervisor_audio_b64)
           .then(({ pcm, durationMs }) => {
@@ -205,6 +226,7 @@ export default function App() {
           .catch(() => {})
       }
       setPendingResult(data)
+
     } catch {
       const fallback = {
         supervisor_summary: `All done. ${text.slice(0,60)}… Visit recorded. Your next patient is ready.`,

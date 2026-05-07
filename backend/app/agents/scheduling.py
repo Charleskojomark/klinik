@@ -50,6 +50,7 @@ async def run_scheduling_agent(state: ClinicalState) -> ClinicalState:
             system_prompt=SYSTEM_PROMPT,
             user_message=context,
             temperature=0.1,
+            max_tokens=128,   # scheduling JSON — just date/time fields
             json_mode=True,
         )
 

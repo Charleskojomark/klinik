@@ -4,6 +4,7 @@ Centralised settings loaded from environment variables / .env file.
 """
 
 from pydantic_settings import BaseSettings
+from pydantic import field_validator
 from functools import lru_cache
 
 
@@ -13,6 +14,18 @@ class Settings(BaseSettings):
     # ── App ──
     app_env: str = "development"
     app_secret_key: str = "change-me-in-production"
+
+    @field_validator("app_secret_key")
+    @classmethod
+    def require_real_secret(cls, v: str, info) -> str:
+        import os
+        env = os.getenv("APP_ENV", "development")
+        if env == "production" and v == "change-me-in-production":
+            raise ValueError(
+                "APP_SECRET_KEY must be changed from the default in production. "
+                "Set a strong random value in your .env file."
+            )
+        return v
 
     # ── Database (Turso / libsql) ──
     database_url: str = "libsql://amd-mkcharles.aws-us-east-2.turso.io"

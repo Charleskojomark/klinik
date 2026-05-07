@@ -45,6 +45,7 @@ async def run_referral_agent(state: ClinicalState) -> ClinicalState:
             system_prompt=SYSTEM_PROMPT,
             user_message=context,
             temperature=0.3,
+            max_tokens=512,   # referral letter JSON
             json_mode=True,
         )
 
