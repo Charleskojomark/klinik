@@ -105,7 +105,6 @@ class EventBus:
         When Redis is unavailable, reads from the in-process event log.
         """
         if self._redis:
-            yield from []  # type: ignore
             stream_key = f"{STREAM_KEY}:{session_id}"
             while True:
                 try:
