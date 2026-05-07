@@ -78,8 +78,21 @@ async def init_db():
         conn.commit()
 
         # Safe migrations — add columns that may be missing from older schema versions
-        _safe_add_column(conn, "encounters", "patient_name", "TEXT")
-        _safe_add_column(conn, "patients",   "phone",        "TEXT")
+        _safe_add_column(conn, "patients",   "phone",            "TEXT")
+        _safe_add_column(conn, "patients",   "age",              "INTEGER")
+        _safe_add_column(conn, "patients",   "sex",              "TEXT")
+        _safe_add_column(conn, "encounters", "patient_name",     "TEXT")
+        _safe_add_column(conn, "encounters", "soap_note",        "TEXT")
+        _safe_add_column(conn, "encounters", "diagnoses",        "TEXT")
+        _safe_add_column(conn, "encounters", "lab_orders",       "TEXT")
+        _safe_add_column(conn, "encounters", "prescriptions",    "TEXT")
+        _safe_add_column(conn, "encounters", "referrals",        "TEXT")
+        _safe_add_column(conn, "encounters", "follow_up",        "TEXT")
+        _safe_add_column(conn, "encounters", "billing",          "TEXT")
+        _safe_add_column(conn, "encounters", "supervisor_summary", "TEXT")
+        _safe_add_column(conn, "encounters", "visit_status",     "TEXT")
+        _safe_add_column(conn, "encounters", "doctor_id",        "TEXT")
+        _safe_add_column(conn, "encounters", "transcript",       "TEXT")
 
         logger.info("🗄️  Database tables ready")
     except Exception as e:

@@ -23,7 +23,10 @@ const IconSend = () => (
 /* ── Decode MP3 base64 → raw PCM Uint8Array (pre-computable) ── */
 export async function decodeMp3ToPcm(mp3B64) {
   const bytes = Uint8Array.from(atob(mp3B64), c => c.charCodeAt(0))
-  const ctx   = new AudioContext({ sampleRate: 16000 })
+  // Use a fresh AudioContext — some mobile browsers need explicit sampleRate
+  const ctx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 })
+  // Resume needed on mobile Safari after autoplay policy blocks it
+  if (ctx.state === 'suspended') await ctx.resume()
   const buf   = await ctx.decodeAudioData(bytes.buffer.slice(0))
   const float = buf.getChannelData(0)
   await ctx.close()
@@ -55,7 +58,16 @@ export default function SupervisorAvatar({ summary, isSpeaking, pcmBuffer, pcmDu
   const silenceIvRef = useRef(null)
 
   // Keep pcm ref current as soon as App pre-decodes audio
-  useEffect(() => { pcmRef.current = pcmBuffer }, [pcmBuffer])
+  // Reset sent/started flags when pcmBuffer is cleared (new consultation)
+  useEffect(() => {
+    pcmRef.current = pcmBuffer
+    if (!pcmBuffer) {
+      sentRef.current    = false
+      startedRef.current = false
+      clearInterval(silenceIvRef.current)
+      silenceIvRef.current = null
+    }
+  }, [pcmBuffer])
   useEffect(() => { durationRef.current = pcmDurationMs || 0 }, [pcmDurationMs])
 
   /* ── Typewriter ── */
@@ -71,25 +83,43 @@ export default function SupervisorAvatar({ summary, isSpeaking, pcmBuffer, pcmDu
     return () => clearInterval(iv)
   }, [summary])
 
-  /* ── Send PCM + start keep-alive ── */
+  /* ── Send PCM in chunks so Simli can lip-sync (real-time streaming) ── */
   const sendAudio = (client) => {
     if (!pcmRef.current || sentRef.current) return
     sentRef.current = true
-    client.sendAudioData(pcmRef.current)
     console.log(`🔊 Dr. Aria speaking (~${(durationRef.current/1000).toFixed(1)}s)`)
 
-    // Trigger screen transition — called AFTER audio is queued in Simli
-    onReady?.()
+    // Simli lip-sync requires audio streamed in real-time chunks.
+    // At 16kHz 16-bit mono: 6000 bytes = 1500 samples = 187.5ms of audio.
+    const CHUNK_SIZE = 6000
+    const data = pcmRef.current
+    let offset = 0
+    let cumulativeMs = 0
+    const chunkMs = (CHUNK_SIZE / 2 / 16000) * 1000  // ~187.5ms per chunk
 
-    // Keep-alive silence starts only AFTER speech finishes
-    const delay = (durationRef.current || 5000) + 1500
-    setTimeout(() => {
-      if (silenceIvRef.current) return
-      silenceIvRef.current = setInterval(() => {
-        try { client.sendAudioData(silenceChunk()) } catch (_) {}
-      }, 8000)
-    }, delay)
+    const sendNextChunk = () => {
+      if (!clientRef.current || offset >= data.length) {
+        // All audio sent — keep-alive after speech ends
+        const remaining = Math.max(0, (durationRef.current || 5000) - cumulativeMs) + 1000
+        setTimeout(() => {
+          if (silenceIvRef.current) return
+          silenceIvRef.current = setInterval(() => {
+            try { clientRef.current?.sendAudioData(silenceChunk()) } catch (_) {}
+          }, 8000)
+        }, remaining)
+        return
+      }
+      const chunk = data.slice(offset, offset + CHUNK_SIZE)
+      try { client.sendAudioData(chunk) } catch (_) {}
+      offset += CHUNK_SIZE
+      cumulativeMs += chunkMs
+      setTimeout(sendNextChunk, chunkMs)
+    }
+
+    onReady?.()
+    sendNextChunk()
   }
+
 
   /* ── Simli WebRTC ── */
   useEffect(() => {

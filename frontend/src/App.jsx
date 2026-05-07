@@ -457,14 +457,18 @@ function VoiceScreen({ phase, transcript, interimTx, error, isSpeaking, onStart,
           {recording ? 'RECORDING — Release to Submit' : 'READY TO LISTEN'}
         </div>
 
-        {/* Transcript */}
+        {/* Transcript — auto-scrolls to bottom as text grows */}
         <div className="transcript-box">
           <div className="transcript-label">Live Transcript</div>
-          <div className={`transcript-text ${!transcript ? 'placeholder' : ''}`}>
+          <div
+            className={`transcript-text ${!transcript ? 'placeholder' : ''}`}
+            ref={el => { if (el) el.scrollTop = el.scrollHeight }}
+          >
             {transcript || (error || 'Hold the mic button and speak the patient details…')}
             {recording && interimTx && <span style={{color:'var(--text-muted)',fontStyle:'italic'}}> {interimTx}</span>}
           </div>
         </div>
+
 
         {/* Mic + Demo */}
         <div className="mic-area">
