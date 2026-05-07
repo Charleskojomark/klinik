@@ -39,7 +39,7 @@ RUN pip install --no-cache-dir onnxruntime
 # mmcv ecosystem — py3.10 wheels exist for these exact versions
 RUN pip install --no-cache-dir setuptools wheel && \
     pip install --no-cache-dir mmengine && \
-    MMCV_WITH_OPS=0 pip install --no-cache-dir "mmcv==2.1.0" && \
+    pip install --no-cache-dir "mmcv-lite==2.1.0" && \
     pip install --no-cache-dir "mmdet==3.3.0" "mmpose==1.3.2"
 
 # Remaining MuseTalk requirements (skip failures gracefully)

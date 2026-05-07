@@ -83,3 +83,4 @@ find "$MODELS_DIR" -name "*.pth" -o -name "*.bin" -o -name "*.pt" 2>/dev/null | 
 echo ""
 echo "✅ Download complete. You can now start the musetalk service:"
 echo "   docker compose --profile gpu up -d musetalk"
+echo "   docker compose --profile musetalk up -d musetalk"
