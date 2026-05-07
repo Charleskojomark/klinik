@@ -1,6 +1,6 @@
 # ── MuseTalk Service Dockerfile ──────────────────────────────────
 # Uses AMD ROCm PyTorch base image for MI300X GPU
-FROM rocm/pytorch:rocm6.2_ubuntu22.04_py3.10_pytorch_2.3.0
+FROM rocm/pytorch:latest
 
 ENV DEBIAN_FRONTEND=noninteractive
 ENV HSA_OVERRIDE_GFX_VERSION=11.0.0
