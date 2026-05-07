@@ -157,15 +157,21 @@ export default function App() {
             : ev.status === 'failed' ? 'error' : 'pending'
           setAgentStatus(prev => ({ ...prev, [ev.agent_name]: mapped }))
 
-          // #11 / #6 fix: handle background audio_ready event from TTS task
+          // Handle background audio_ready event from TTS task
           if (ev.agent_name === 'audio' && ev.status === 'ready' && ev.output) {
             try {
               const audioData = JSON.parse(ev.output)
               if (audioData.supervisor_audio_b64) {
+                // Cancel browser TTS fallback — real Simli audio is arriving
+                clearTimeout(browserTtsTimerRef.current)
+                window.speechSynthesis?.cancel()
+
                 decodeMp3ToPcm(audioData.supervisor_audio_b64)
                   .then(({ pcm, durationMs }) => {
                     setPcmBuffer(pcm)
                     setPcmDurationMs(durationMs)
+                    // Stop isSpeaking indicator after audio finishes
+                    setTimeout(() => setIsSpeaking(false), durationMs + 1500)
                   })
                   .catch(() => {})
               }
@@ -179,7 +185,10 @@ export default function App() {
     return es
   }
 
+
   // ── Main consultation flow ──
+  const browserTtsTimerRef = useRef(null)
+
   const runConsultation = async (text) => {
     setPhase('processing')
     setResult(null)
@@ -191,29 +200,25 @@ export default function App() {
     const init = {}; AGENTS.forEach(a => { init[a.key] = 'pending' })
     setAgentStatus(init)
 
-    // Generate session_id client-side and send in body so backend uses the same one.
-    // SSE subscription is opened AFTER the POST returns to use the confirmed session_id.
+    // The backend uses the session_id we send in the request body.
+    // Subscribe SSE BEFORE the POST so agent events stream in real-time
+    // and each agent card animates as it completes.
     const sessionId = `session-${crypto.randomUUID().slice(0,8)}`
+    subscribeSSE(sessionId)
 
     try {
       const res = await fetch(`${API}/consultation`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
+        body: JSON.stringify({
           transcript: text,
           session_id: sessionId,
-          patient_id: activePatient ? activePatient.id : undefined 
+          patient_id: activePatient ? activePatient.id : undefined
         }),
       })
       if (!res.ok) throw new Error('API error')
       const data = await res.json()
 
-      // #11 fix: subscribe SSE AFTER the POST confirms the session_id.
-      // The event_bus in-process log replays any events already published mid-workflow.
-      subscribeSSE(data.session_id || sessionId)
-
-      const all = {}; AGENTS.forEach(a => { all[a.key] = 'done' })
-      setAgentStatus(all)
       fetchPatients()
       // Audio arrives via SSE 'audio_ready' event when background TTS task finishes.
       // Falls back to inline audio if backend provides it directly.
@@ -225,6 +230,9 @@ export default function App() {
           })
           .catch(() => {})
       }
+      // Mark all done (catches any missed SSE events)
+      const all = {}; AGENTS.forEach(a => { all[a.key] = 'done' })
+      setAgentStatus(all)
       setPendingResult(data)
 
     } catch {
@@ -237,26 +245,35 @@ export default function App() {
     }
   }
 
-  // ── When result is ready → show complete screen immediately.
-  // ariaReady (Simli connected) is a bonus enhancement, not a blocker.
-  // Audio arrives async via SSE, avatar will speak when pcmBuffer is set.
+  // ── Transition to complete as soon as pendingResult is set. ──
+  // Audio sync fix: do NOT start browser TTS immediately — it would compete with Simli.
+  // Simli avatar handles speech; browser TTS is a silent fallback only after 10s timeout.
   useEffect(() => {
     if (!pendingResult) return
 
-    // Transition immediately — don't wait for Simli WebRTC to connect
+    // Cancel any pending fallback TTS from a previous session
+    clearTimeout(browserTtsTimerRef.current)
+    window.speechSynthesis?.cancel()
+
     setResult(pendingResult)
     setPendingResult(null)
     setPhase('complete')
     setIsSpeaking(true)
 
-    // If audio was already pre-decoded (inline response), use it
-    // Otherwise audio arrives via SSE audio_ready event
+    const summary = pendingResult.supervisor_summary || ''
+    const wordCount = summary.split(' ').length
+
     if (pendingResult.supervisor_audio_b64) {
-      const wordCount = (pendingResult.supervisor_summary || '').split(' ').length
+      // Inline audio: Simli will play it, set speaking duration
       setTimeout(() => setIsSpeaking(false), Math.max(5000, wordCount * 350))
     } else {
-      // Fallback to browser TTS while waiting for Deepgram audio via SSE
-      speak(pendingResult.supervisor_summary, () => setIsSpeaking(false))
+      // Async audio: wait up to 10s for Simli/Deepgram audio via SSE.
+      // Only fall back to browser TTS if nothing arrives (e.g. keys not configured).
+      browserTtsTimerRef.current = setTimeout(() => {
+        if (!pcmBuffer) {
+          speak(summary, () => setIsSpeaking(false))
+        }
+      }, 10000)
     }
   }, [pendingResult])
 
