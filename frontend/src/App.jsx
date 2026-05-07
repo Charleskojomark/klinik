@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import PatientPanel from './components/PatientPanel.jsx'
-import SupervisorAvatar, { decodeMp3ToPcm } from './components/SupervisorAvatar.jsx'
+import DoctorAvatar from './components/DoctorAvatar.jsx'
 import AudioVisualizer from './components/AudioVisualizer.jsx'
 
 const API = '/api'
@@ -61,11 +61,9 @@ export default function App() {
   const [result,         setResult]        = useState(null)
   const [isSpeaking,     setIsSpeaking]    = useState(false)
   const [srError,        setSrError]       = useState(null)
-  const [ariaReady,      setAriaReady]     = useState(false)
   const [pendingResult,  setPendingResult] = useState(null)
-  const [pcmBuffer,      setPcmBuffer]     = useState(null)   // pre-decoded PCM bytes
-  const [pcmDurationMs,  setPcmDurationMs] = useState(0)
-  
+  const [audioB64,       setAudioB64]      = useState(null)  // Deepgram MP3 base64
+
   // ── Database State ──
   const [patients,       setPatients]      = useState([])
   const [activePatient,  setActivePatient] = useState(null)
@@ -220,16 +218,8 @@ export default function App() {
 
       fetchPatients()
 
-      // Audio is inline in the response — decode immediately so avatar can
-      // start streaming PCM the instant Simli WebRTC connects.
-      if (data.supervisor_audio_b64) {
-        decodeMp3ToPcm(data.supervisor_audio_b64)
-          .then(({ pcm, durationMs }) => {
-            setPcmBuffer(pcm)
-            setPcmDurationMs(durationMs)
-          })
-          .catch(() => {})
-      }
+      // Audio is inline in the response — pass directly to DoctorAvatar
+      setAudioB64(data.supervisor_audio_b64 || null)
 
       // Mark all agents done (catches any missed SSE events)
       const all = {}; AGENTS.forEach(a => { all[a.key] = 'done' })
@@ -273,6 +263,7 @@ export default function App() {
     sseRef.current?.close()
     setPhase('idle'); setFinalTx(''); setInterimTx('')
     setResult(null); setAgentStatus({}); setIsSpeaking(false)
+    setAudioB64(null)
   }
 
   const fullTx = (finalTx + ' ' + interimTx).trim()
@@ -336,15 +327,12 @@ export default function App() {
             {phase === 'processing' && (
               <AgentsScreen statuses={agentStatus} elapsed={elapsed} doneCount={doneCount} total={AGENTS.length} />
             )}
-            {/* Mount SupervisorAvatar ONLY when complete so WebRTC starts on a
-                visible element — pre-warming with display:none causes WebRTC failures */}
+            {/* DoctorAvatar: mounts only on complete, plays audio instantly */}
             {phase === 'complete' && (
-              <SupervisorAvatar
+              <DoctorAvatar
+                audioB64={audioB64}
                 summary={result?.supervisor_summary || ''}
                 isSpeaking={isSpeaking}
-                pcmBuffer={pcmBuffer}
-                pcmDurationMs={pcmDurationMs}
-                onReady={() => setAriaReady(true)}
                 onDone={() => setIsSpeaking(false)}
                 onSummary={() => setPage('patients')}
                 onSend={() => setPhase('chat')}
