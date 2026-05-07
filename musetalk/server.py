@@ -1,3 +1,7 @@
+import importlib
+import mmcv.utils.ext_loader as _el
+_el.load_ext = lambda name, funcs=None: type("_stub", (), {f: (lambda *a, **k: None) for f in (funcs or [])})()
+
 """
 MuseTalk FastAPI Service — Klinik Dr. Aria Avatar
 Wraps MuseTalk v1.5 inference as a REST microservice.

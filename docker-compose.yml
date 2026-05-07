@@ -70,10 +70,13 @@ services:
     ports:
       - "8090:8090"
     devices:
-      - /dev/kfd          # AMD ROCm kernel fusion driver
-      - /dev/dri          # AMD GPU render nodes
+      - /dev/kfd:/dev/kfd
+      - /dev/dri:/dev/dri
+    security_opt:
+      - seccomp:unconfined
     group_add:
-      - video
+      - "992"
+      - "44"
     volumes:
       - ./musetalk/models:/musetalk/models   # model weights (persisted)
       - musetalk_videos:/musetalk/videos     # shared with backend for serving

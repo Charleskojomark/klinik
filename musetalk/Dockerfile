@@ -42,6 +42,9 @@ RUN pip install --no-cache-dir setuptools wheel && \
     pip install --no-cache-dir "mmcv-lite==2.1.0" && \
     pip install --no-cache-dir "mmdet==3.3.0" "mmpose==1.3.2"
 
+# Re-pin ROCm PyTorch after mmdet/mmpose may have overwritten it
+RUN pip install --no-cache-dir "torch==2.4.0" "torchvision==0.19.0" --index-url https://download.pytorch.org/whl/rocm6.1
+
 # Remaining MuseTalk requirements (skip failures gracefully)
 RUN pip install --no-cache-dir -r requirements.txt || true
 
