@@ -14,13 +14,18 @@ import json
 import logging
 import uuid
 import asyncio
+import base64
+import tempfile
 from collections import OrderedDict
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
+from fastapi.staticfiles import StaticFiles
+from pathlib import Path
 from pydantic import BaseModel
 from typing import Optional
+import httpx
 
 from app.config import get_settings
 from app.models.clinical_state import ClinicalState
@@ -123,14 +128,55 @@ class ConsultationResponse(BaseModel):
     session_id: str
     supervisor_summary: str
     state: ClinicalState
-    supervisor_audio_b64: Optional[str] = None   # populated asynchronously via SSE
-    supervisor_simli_token: Optional[str] = None  # populated asynchronously via SSE
+    supervisor_audio_b64: Optional[str] = None
+    supervisor_video_url: Optional[str] = None   # MuseTalk video (arrives via SSE)
 
 
-# (Background audio task removed — TTS is now generated synchronously
-#  and returned directly in the POST response for zero SSE roundtrip latency)
+MUSETALK_URL = "http://musetalk:8090"  # internal docker service
+MUSETALK_VIDEOS_DIR = Path("/musetalk/videos")
 
 
+async def _render_musetalk_video(session_id: str, audio_b64: str):
+    """
+    Background task: POST MP3 to MuseTalk service → publish SSE with video_url.
+    Runs after the consultation response is already sent to the client.
+    The frontend receives the video URL via SSE and swaps the SVG avatar to video.
+    """
+    event_bus = await get_event_bus()
+    try:
+        # Decode base64 audio
+        audio_bytes = base64.b64decode(audio_b64)
+
+        async with httpx.AsyncClient(timeout=120.0) as client:
+            # Check musetalk health first
+            try:
+                health = await client.get(f"{MUSETALK_URL}/health")
+                if health.status_code != 200:
+                    logger.warning("[musetalk] Service not ready, skipping video render")
+                    return
+            except Exception:
+                logger.warning("[musetalk] Service unreachable, skipping video render")
+                return
+
+            logger.info(f"[musetalk] Rendering video for {session_id}...")
+            resp = await client.post(
+                f"{MUSETALK_URL}/render",
+                files={"audio": ("audio.mp3", audio_bytes, "audio/mpeg")},
+            )
+
+        if resp.status_code == 200:
+            data = resp.json()
+            video_url = data.get("video_url", "")
+            logger.info(f"[musetalk] ✅ Video ready for {session_id}: {video_url}")
+            await event_bus.publish_agent_event(
+                session_id, "musetalk", "ready",
+                output=json.dumps({"video_url": video_url})
+            )
+        else:
+            logger.error(f"[musetalk] Render failed ({resp.status_code}): {resp.text[:200]}")
+
+    except Exception as e:
+        logger.error(f"[musetalk] Background render error for {session_id}: {e}")
 
 # ──────────────────────────────────────────────
 # Core Endpoints
@@ -192,14 +238,19 @@ async def start_consultation(req: ConsultationRequest):
     except Exception as e:
         logger.error(f"Failed to persist session {session_id}: {e}")
 
-    # Generate TTS synchronously — audio travels with the HTTP response,
-    # no SSE polling roundtrip needed. Deepgram latency is ~150ms.
+    # Generate TTS synchronously — audio travels with the HTTP response.
+    # Deepgram latency is ~150ms.
     audio_b64 = ""
     try:
         audio_b64 = await generate_tts_audio_b64(result.supervisor_summary)
         logger.info(f"🔊 Deepgram audio included in response for {session_id}")
     except Exception as e:
         logger.warning(f"TTS failed, response will have no audio: {e}")
+
+    # Fire-and-forget MuseTalk render (runs after response is sent)
+    # Frontend receives video URL via SSE event when ready (~5-15s)
+    if audio_b64:
+        asyncio.create_task(_render_musetalk_video(session_id, audio_b64))
 
     await event_bus.publish_agent_event(
         session_id, "workflow", "completed", output=result.supervisor_summary
@@ -210,7 +261,6 @@ async def start_consultation(req: ConsultationRequest):
         supervisor_summary=result.supervisor_summary,
         state=result,
         supervisor_audio_b64=audio_b64 or None,
-        supervisor_simli_token=None,
     )
 
 

@@ -1,9 +1,11 @@
 /**
- * DoctorAvatar — Replaces Simli WebRTC
+ * DoctorAvatar — Zero-dependency animated avatar for Klinik
  *
- * Audio: base64 MP3 → Blob URL → <audio autoPlay>  (< 100ms to first sound)
+ * Audio:     base64 MP3 → Blob URL → <audio autoPlay>  (< 100ms to first sound)
  * Animation: Web Audio AnalyserNode drives mouth amplitude in real time.
  *            Falls back to sine-wave pulse if AudioContext is unavailable.
+ * Video:     When MuseTalk finishes rendering (~10s after consultation),
+ *            videoUrl prop arrives and the SVG face fades out, real video fades in.
  */
 import { useEffect, useRef, useState } from 'react'
 
@@ -25,7 +27,7 @@ const IconSend = () => (
   </svg>
 )
 
-export default function DoctorAvatar({ audioB64, summary, isSpeaking, onDone, onSummary, onSend }) {
+export default function DoctorAvatar({ audioB64, videoUrl, summary, isSpeaking, onDone, onSummary, onSend }) {
   const [displayText, setDisplayText] = useState('')
   const [isTyping,    setIsTyping]    = useState(true)
   const [mouthOpen,   setMouthOpen]   = useState(0)   // 0–1
@@ -139,6 +141,7 @@ export default function DoctorAvatar({ audioB64, summary, isSpeaking, onDone, on
   return (
     <div className="completion-overlay">
       <style>{`
+        @keyframes da-fadein { from { opacity:0; } to { opacity:1; } }
         @keyframes da-speaking {
           0%,100% { box-shadow: 0 0 24px rgba(167,139,250,0.25), 0 0 48px rgba(167,139,250,0.15); }
           50%      { box-shadow: 0 0 56px rgba(167,139,250,0.55), 0 0 90px rgba(167,139,250,0.30); }
@@ -159,13 +162,36 @@ export default function DoctorAvatar({ audioB64, summary, isSpeaking, onDone, on
           <div
             className={`sv-avatar-ring da-ring ${speaking ? 'speaking' : ''}`}
             style={{ width:160, height:160, overflow:'hidden', background:'#0F0A1E',
-                     cursor: !speaking && audioB64 ? 'pointer' : 'default' }}
+                     cursor: !speaking && audioB64 ? 'pointer' : 'default',
+                     position:'relative' }}
             onClick={() => {
-              // Resume autoplay on first tap (mobile gesture unlock)
               if (audioRef.current?.paused && audioB64) audioRef.current.play().catch(() => {})
             }}
           >
-            <svg viewBox="0 0 80 80" width="160" height="160" xmlns="http://www.w3.org/2000/svg">
+            {/* MuseTalk real video — fades in when SSE delivers videoUrl */}
+            {videoUrl && (
+              <video
+                key={videoUrl}
+                src={videoUrl}
+                autoPlay
+                loop
+                muted={false}
+                playsInline
+                style={{
+                  position: 'absolute', inset: 0,
+                  width: '100%', height: '100%',
+                  objectFit: 'cover',
+                  borderRadius: '50%',
+                  animation: 'da-fadein 0.6s ease-in-out',
+                  zIndex: 2,
+                }}
+              />
+            )}
+
+            {/* SVG avatar — always rendered, hidden behind video when videoUrl arrives */}
+            <div style={{ position:'absolute', inset:0, zIndex:1,
+                          opacity: videoUrl ? 0 : 1,
+                          transition: 'opacity 0.6s ease-in-out' }}>
               <defs>
                 <radialGradient id="da-face" cx="48%" cy="42%" r="52%">
                   <stop offset="0%"   stopColor="#DDD6FE"/>
@@ -246,6 +272,7 @@ export default function DoctorAvatar({ audioB64, summary, isSpeaking, onDone, on
                 stroke="#A78BFA" strokeWidth="1.5" fill="none" strokeLinecap="round"/>
               <circle cx="40" cy="74" r="2.5" fill="none" stroke="#A78BFA" strokeWidth="1.2"/>
             </svg>
+            </div>{/* end SVG wrapper */}
           </div>
 
           {/* Tap-to-play hint on mobile if autoplay was blocked */}
