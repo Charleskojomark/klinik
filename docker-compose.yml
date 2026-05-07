@@ -60,35 +60,6 @@ services:
     depends_on:
       - backend
 
-  # ──────────────────────────────────────────────
-  # MuseTalk — Avatar lip-sync video service (GPU)
-  # ──────────────────────────────────────────────
-  musetalk:
-    build:
-      context: ./musetalk
-      dockerfile: Dockerfile
-    ports:
-      - "8090:8090"
-    devices:
-      - /dev/kfd:/dev/kfd
-      - /dev/dri:/dev/dri
-    security_opt:
-      - seccomp:unconfined
-    group_add:
-      - "992"
-      - "44"
-    volumes:
-      - ./musetalk/models:/musetalk/models   # model weights (persisted)
-      - musetalk_videos:/musetalk/videos     # shared with backend for serving
-      - ./musetalk/data:/musetalk/data       # avatar reference images
-    environment:
-      - HSA_OVERRIDE_GFX_VERSION=11.0.0     # MI300X ROCm compatibility
-    depends_on:
-      - backend
-    profiles:
-      - musetalk   # start with: docker compose --profile musetalk up -d
-
 
 volumes:
   model_cache:
-  musetalk_videos:   # shared volume: musetalk writes, backend serves

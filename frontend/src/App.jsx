@@ -63,7 +63,6 @@ export default function App() {
   const [srError,        setSrError]       = useState(null)
   const [pendingResult,  setPendingResult] = useState(null)
   const [audioB64,       setAudioB64]      = useState(null)  // Deepgram MP3 base64
-  const [videoUrl,       setVideoUrl]      = useState(null)  // MuseTalk video URL
 
   // ── Database State ──
   const [patients,       setPatients]      = useState([])
@@ -173,14 +172,6 @@ export default function App() {
       try {
         const ev = JSON.parse(e.data)
         if (ev.agent_name && ev.status) {
-          // MuseTalk video ready — swap SVG avatar to real video
-          if (ev.agent_name === 'musetalk' && ev.status === 'ready') {
-            try {
-              const payload = JSON.parse(ev.output || '{}')
-              if (payload.video_url) setVideoUrl(payload.video_url)
-            } catch {}
-            return
-          }
           const mapped = ev.status === 'running'   ? 'working'
                        : ev.status === 'completed' ? 'done'
                        : ev.status === 'failed'    ? 'error' : 'pending'
@@ -270,7 +261,7 @@ export default function App() {
     sseRef.current?.close()
     setPhase('idle'); setFinalTx(''); setInterimTx('')
     setResult(null); setAgentStatus({}); setIsSpeaking(false)
-    setAudioB64(null); setVideoUrl(null)
+    setAudioB64(null)
   }
 
   const fullTx = (finalTx + ' ' + interimTx).trim()
@@ -334,12 +325,10 @@ export default function App() {
             {phase === 'processing' && (
               <AgentsScreen statuses={agentStatus} elapsed={elapsed} doneCount={doneCount} total={AGENTS.length} />
             )}
-            {/* DoctorAvatar: SVG avatar plays audio instantly;
-                videoUrl arrives via SSE ~10s later and swaps in the real face */}
+            {/* DoctorAvatar: mounts only on complete, plays audio instantly */}
             {phase === 'complete' && (
               <DoctorAvatar
                 audioB64={audioB64}
-                videoUrl={videoUrl}
                 summary={result?.supervisor_summary || ''}
                 isSpeaking={isSpeaking}
                 onDone={() => setIsSpeaking(false)}
