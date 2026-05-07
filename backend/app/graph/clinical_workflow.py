@@ -41,7 +41,6 @@ logger = logging.getLogger(__name__)
 
 class GraphState(TypedDict):
     clinical_state: ClinicalState
-    event_bus: EventBus   # resolved once, shared across all nodes
 
 
 # ──────────────────────────────────────────────
@@ -50,7 +49,8 @@ class GraphState(TypedDict):
 
 async def transcription_node(state: GraphState) -> GraphState:
     """Phase 1, Node 1: Transcription"""
-    cs, eb = state["clinical_state"], state["event_bus"]
+    cs = state["clinical_state"]
+    eb = await get_event_bus()
     await eb.publish_agent_event(cs.session_id, "transcription", "running")
     cs = await run_transcription_agent(cs)
     await eb.publish_agent_event(cs.session_id, "transcription", "completed")
@@ -59,7 +59,8 @@ async def transcription_node(state: GraphState) -> GraphState:
 
 async def clinical_nlp_node(state: GraphState) -> GraphState:
     """Phase 1, Node 2: Clinical NLP — extract entities"""
-    cs, eb = state["clinical_state"], state["event_bus"]
+    cs = state["clinical_state"]
+    eb = await get_event_bus()
     await eb.publish_agent_event(cs.session_id, "clinical_nlp", "running")
     cs = await run_clinical_nlp_agent(cs)
     await eb.publish_agent_event(cs.session_id, "clinical_nlp", "completed")
@@ -71,7 +72,8 @@ async def parallel_agents_node(state: GraphState) -> GraphState:
     Phase 2: All 6 agents fire in PARALLEL.
     This is the key performance advantage — all admin work happens simultaneously.
     """
-    cs, eb = state["clinical_state"], state["event_bus"]
+    cs = state["clinical_state"]
+    eb = await get_event_bus()
 
     # Notify frontend all 6 are running concurrently
     for agent in ["ehr_notes", "lab_order", "pharmacy", "referral", "scheduling", "billing_coding"]:
@@ -186,12 +188,8 @@ async def run_clinical_workflow(clinical_state: ClinicalState) -> ClinicalState:
     """
     logger.info(f"🏥 Starting clinical workflow: {clinical_state.session_id}")
 
-    # #9 fix: resolve event bus once per workflow run
-    eb = await get_event_bus()
-
     initial_state: GraphState = {
         "clinical_state": clinical_state,
-        "event_bus": eb,
     }
 
     # Each session uses its own checkpointer thread_id for isolation
