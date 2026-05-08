@@ -52,6 +52,8 @@ function speak(text, onEnd) {
 }
 
 export default function App() {
+  const [showSplash,     setShowSplash]    = useState(true)
+  const [splashOut,      setSplashOut]     = useState(false)
   const [page,           setPage]          = useState('home')
   const [phase,          setPhase]         = useState('idle')     // idle|recording|processing|complete
   const [finalTx,        setFinalTx]       = useState('')
@@ -67,6 +69,13 @@ export default function App() {
   // ── Database State ──
   const [patients,       setPatients]      = useState([])
   const [activePatient,  setActivePatient] = useState(null)
+
+  // Splash — auto-dismiss after 2.5s
+  useEffect(() => {
+    const t1 = setTimeout(() => setSplashOut(true), 2000)   // start fade-out
+    const t2 = setTimeout(() => setShowSplash(false), 2500) // unmount
+    return () => { clearTimeout(t1); clearTimeout(t2) }
+  }, [])
 
   // Fetch patients on mount
   const fetchPatients = async () => {
@@ -269,6 +278,24 @@ export default function App() {
 
   return (
     <div className="mobile-shell">
+      {/* ── Splash Screen ── */}
+      {showSplash && (
+        <div className={`splash-overlay ${splashOut ? 'splash-out' : ''}`}>
+          <div className="splash-content">
+            <div className="splash-logo-ring">
+              <svg viewBox="0 0 48 48" fill="none" width="52" height="52">
+                <rect x="3" y="3" width="42" height="42" rx="16" fill="rgba(167,139,250,0.12)" stroke="#A78BFA" strokeWidth="2.5"/>
+                <path d="M24 13v22M13 24h22" stroke="#A78BFA" strokeWidth="3.5" strokeLinecap="round"/>
+              </svg>
+            </div>
+            <div className="splash-brand">KLINIK</div>
+            <div className="splash-tagline">
+              Give doctors back their time.<br/>Give patients back their doctor.
+            </div>
+            <div className="splash-sub">AI-Powered Clinical Workflow · AMD MI300X</div>
+          </div>
+        </div>
+      )}
       {/* Header */}
       <header className="app-header">
         <div className="header-left" onClick={() => { reset(); setPage('home'); }} style={{cursor:'pointer'}}>

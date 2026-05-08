@@ -67,6 +67,88 @@ body {
   position: relative;
 }
 
+/* ── Splash Screen ── */
+.splash-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: radial-gradient(ellipse at 50% 40%, #1A0B3D 0%, #0A0514 60%, #060210 100%);
+  animation: splash-in 0.5s ease-out both;
+  transition: opacity 0.5s ease, transform 0.5s ease;
+}
+.splash-overlay.splash-out {
+  opacity: 0;
+  transform: scale(1.04);
+  pointer-events: none;
+}
+@keyframes splash-in {
+  from { opacity: 0; transform: scale(0.97); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+.splash-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 18px;
+  padding: 0 32px;
+  text-align: center;
+}
+
+.splash-logo-ring {
+  width: 100px; height: 100px;
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  background: radial-gradient(circle, rgba(167,139,250,0.15) 0%, rgba(124,58,237,0.05) 100%);
+  border: 1.5px solid rgba(167,139,250,0.25);
+  box-shadow:
+    0 0 40px rgba(167,139,250,0.35),
+    0 0 80px rgba(124,58,237,0.15),
+    inset 0 1px 0 rgba(255,255,255,0.06);
+  animation: splash-pulse 2s ease-in-out infinite;
+}
+@keyframes splash-pulse {
+  0%,100% { box-shadow: 0 0 40px rgba(167,139,250,0.35), 0 0 80px rgba(124,58,237,0.15); }
+  50%      { box-shadow: 0 0 60px rgba(167,139,250,0.55), 0 0 120px rgba(124,58,237,0.25); }
+}
+
+.splash-brand {
+  font-family: var(--font);
+  font-size: 42px;
+  font-weight: 800;
+  letter-spacing: 0.15em;
+  background: linear-gradient(135deg, #fff 30%, #A78BFA 70%, #7C3AED 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  text-shadow: none;
+  line-height: 1;
+  margin-top: 4px;
+}
+
+.splash-tagline {
+  font-family: var(--font);
+  font-size: 16px;
+  font-weight: 500;
+  color: rgba(255,255,255,0.82);
+  line-height: 1.65;
+  letter-spacing: 0.01em;
+  max-width: 280px;
+}
+
+.splash-sub {
+  font-family: var(--font);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: rgba(167,139,250,0.55);
+  margin-top: 4px;
+}
+
 /* ── Header — floating pill, neumorphic ── */
 .app-header {
   height: 64px;
