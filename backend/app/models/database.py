@@ -25,16 +25,19 @@ _conn = None
 
 
 def _make_conn():
-    """Create a fresh SQLite connection with WAL mode enabled."""
+    """Create a fresh SQLite connection with WAL mode and named column access."""
     os.makedirs(os.path.dirname(_DB_PATH), exist_ok=True)
     import sqlite3
     conn = sqlite3.connect(_DB_PATH, check_same_thread=False, timeout=30)
-    # WAL mode: multiple readers + one writer simultaneously; safe for multi-worker uvicorn
+    # Row factory: allows dict-style access (row["column_name"])
+    # This is CRITICAL — without it, SELECT * with ALTER TABLE migrations
+    # returns columns in the wrong order (migrations append to end).
+    conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
-    conn.execute("PRAGMA synchronous=NORMAL")   # fast + crash-safe
-    conn.execute("PRAGMA busy_timeout=30000")   # wait up to 30s on lock
+    conn.execute("PRAGMA synchronous=NORMAL")
+    conn.execute("PRAGMA busy_timeout=30000")
     conn.commit()
-    logger.info(f"🗄️  SQLite connected: {_DB_PATH} (WAL mode)")
+    logger.info(f"🗄️  SQLite connected: {_DB_PATH} (WAL mode, named rows)")
     return conn
 
 
@@ -186,26 +189,38 @@ async def save_clinical_state(state) -> None:
 
 
 def _row_to_patient(row) -> dict:
+    """Convert a sqlite3.Row to a patient dict using named column access."""
+    d = dict(row)
     return {
-        "id": row[0], "name": row[1], "age": row[2],
-        "sex": row[3], "phone": row[4], "created_at": row[5],
+        "id":           d.get("id"),
+        "name":         d.get("name"),
+        "age":          d.get("age"),
+        "sex":          d.get("sex"),
+        "phone":        d.get("phone"),
+        "created_at":   d.get("created_at"),
+        "encounter_count": d.get("encounter_count", 0),
     }
 
 
 def _row_to_encounter(row) -> dict:
+    """Convert a sqlite3.Row to an encounter dict using named column access."""
+    d = dict(row)
     return {
-        "id": row[0], "patient_id": row[1], "patient_name": row[2],
-        "doctor_id": row[3], "transcript": row[4],
-        "supervisor_summary": row[5],
-        "soap_note":     _safe_json(row[6], {}),
-        "diagnoses":     _safe_json(row[7], []),
-        "lab_orders":    _safe_json(row[8], []),
-        "prescriptions": _safe_json(row[9], []),
-        "referrals":     _safe_json(row[10], []),
-        "follow_up":     _safe_json(row[11], {}),
-        "billing":       _safe_json(row[12], {}),
-        "visit_status":  row[13],
-        "created_at":    row[14],
+        "id":                d.get("id"),
+        "patient_id":        d.get("patient_id"),
+        "patient_name":      d.get("patient_name") or "Unknown Patient",
+        "doctor_id":         d.get("doctor_id"),
+        "transcript":        d.get("transcript"),
+        "supervisor_summary": d.get("supervisor_summary"),
+        "soap_note":         _safe_json(d.get("soap_note"), {}),
+        "diagnoses":         _safe_json(d.get("diagnoses"), []),
+        "lab_orders":        _safe_json(d.get("lab_orders"), []),
+        "prescriptions":     _safe_json(d.get("prescriptions"), []),
+        "referrals":         _safe_json(d.get("referrals"), []),
+        "follow_up":         _safe_json(d.get("follow_up"), {}),
+        "billing":           _safe_json(d.get("billing"), {}),
+        "visit_status":      d.get("visit_status"),
+        "created_at":        d.get("created_at"),
     }
 
 
