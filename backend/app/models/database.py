@@ -221,8 +221,23 @@ def _safe_json(text: Optional[str], default):
 async def get_all_patients() -> list[dict]:
     conn = await _get_conn()
     try:
-        cursor = conn.execute("SELECT * FROM patients ORDER BY created_at DESC")
-        return [_row_to_patient(r) for r in cursor.fetchall()]
+        # LEFT JOIN to get encounter count without a separate query per patient
+        cursor = conn.execute("""
+            SELECT p.id, p.name, p.age, p.sex, p.phone, p.created_at,
+                   COUNT(e.id) AS encounter_count
+            FROM patients p
+            LEFT JOIN encounters e ON e.patient_id = p.id
+            GROUP BY p.id
+            ORDER BY p.created_at DESC
+        """)
+        return [
+            {
+                "id": r[0], "name": r[1], "age": r[2],
+                "sex": r[3], "phone": r[4], "created_at": r[5],
+                "encounter_count": r[6],
+            }
+            for r in cursor.fetchall()
+        ]
     except Exception as e:
         logger.error(f"get_all_patients error: {e}")
         return []
@@ -231,11 +246,22 @@ async def get_all_patients() -> list[dict]:
 async def get_patient(patient_id: str) -> Optional[dict]:
     conn = await _get_conn()
     try:
-        cursor = conn.execute("SELECT * FROM patients WHERE id = ?", (patient_id,))
+        cursor = conn.execute("""
+            SELECT p.id, p.name, p.age, p.sex, p.phone, p.created_at,
+                   COUNT(e.id) AS encounter_count
+            FROM patients p
+            LEFT JOIN encounters e ON e.patient_id = p.id
+            WHERE p.id = ?
+            GROUP BY p.id
+        """, (patient_id,))
         row = cursor.fetchone()
         if not row:
             return None
-        patient = _row_to_patient(row)
+        patient = {
+            "id": row[0], "name": row[1], "age": row[2],
+            "sex": row[3], "phone": row[4], "created_at": row[5],
+            "encounter_count": row[6],
+        }
         enc_cursor = conn.execute(
             "SELECT * FROM encounters WHERE patient_id = ? ORDER BY created_at DESC",
             (patient_id,)
