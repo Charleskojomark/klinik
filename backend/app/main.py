@@ -90,7 +90,7 @@ app = FastAPI(
 # #10 fix — Single Instrumentator registration only
 Instrumentator().instrument(app).expose(app)
 
-# CORS — allow frontend
+# CORS — allow frontend (localhost dev + production)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
@@ -98,6 +98,8 @@ app.add_middleware(
         "http://localhost:3001",
         "http://localhost:5173",
         "http://localhost:5174",
+        "https://klinik.charlesmark.xyz",
+        "http://klinik.charlesmark.xyz",
     ],
     allow_credentials=True,
     allow_methods=["*"],
@@ -215,7 +217,7 @@ async def start_consultation(req: ConsultationRequest):
 
 
 @app.post("/api/demo", response_model=ConsultationResponse)
-async def run_demo(background_tasks: BackgroundTasks):
+async def run_demo():
     """The Winning Demo — Amaka pre-eclampsia scenario."""
     demo_transcript = (
         "Amaka Obi, 28, 12 weeks pregnant, BP 145/95, headache, blurred vision. "
@@ -227,7 +229,7 @@ async def run_demo(background_tasks: BackgroundTasks):
         doctor_id="dr-eze",
         patient_phone="+2348012345678",
     )
-    return await start_consultation(req, background_tasks)
+    return await start_consultation(req)
 
 
 # ──────────────────────────────────────────────

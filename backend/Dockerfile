@@ -16,5 +16,6 @@ COPY . .
 
 EXPOSE 8080
 
-# Use 4 workers in production. Override with UVICORN_WORKERS env var.
-CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port 8080 --workers ${UVICORN_WORKERS:-4}"]
+# Single worker — SQLite is not concurrent-write-safe across processes.
+# Scale horizontally with Turso cloud DB if multi-instance is needed.
+CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port 8080 --workers ${UVICORN_WORKERS:-1}"]

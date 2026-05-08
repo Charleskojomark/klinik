@@ -1,24 +1,54 @@
 """
-Klinik — Database Layer (Turso / libSQL)
+Klinik — Database Layer (Turso / libSQL / SQLite fallback)
 Persists clinical states and patient records for the patient history panel.
-Falls back gracefully to SQLite on disk when Turso is not configured.
+
+Fixes applied:
+  - DB path moved to /app/data/klinik.db (explicit, survives volume mounts)
+  - WAL mode + NORMAL synchronous (concurrent multi-process safe)
+  - Connection health check — resets on broken connection
+  - 30s busy timeout to survive SQLite lock contention
 """
 
 import json
 import logging
+import os
 from datetime import datetime
 from typing import Optional
 from app.config import get_settings
 
 logger = logging.getLogger(__name__)
 
+# Explicit path inside the data volume (docker-compose maps ./data → /app/data)
+_DB_PATH = os.environ.get("DB_PATH", "/app/data/klinik.db")
+
 _conn = None
+
+
+def _make_conn():
+    """Create a fresh SQLite connection with WAL mode enabled."""
+    os.makedirs(os.path.dirname(_DB_PATH), exist_ok=True)
+    import sqlite3
+    conn = sqlite3.connect(_DB_PATH, check_same_thread=False, timeout=30)
+    # WAL mode: multiple readers + one writer simultaneously; safe for multi-worker uvicorn
+    conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA synchronous=NORMAL")   # fast + crash-safe
+    conn.execute("PRAGMA busy_timeout=30000")   # wait up to 30s on lock
+    conn.commit()
+    logger.info(f"🗄️  SQLite connected: {_DB_PATH} (WAL mode)")
+    return conn
 
 
 async def _get_conn():
     global _conn
+
+    # Validate existing connection is still usable
     if _conn is not None:
-        return _conn
+        try:
+            _conn.execute("SELECT 1")
+            return _conn
+        except Exception:
+            logger.warning("🗄️  DB connection broken — reconnecting")
+            _conn = None
 
     settings = get_settings()
 
@@ -32,12 +62,10 @@ async def _get_conn():
             )
             logger.info("🗄️  Connected to Turso cloud database")
         else:
-            _conn = libsql.connect("klinik_local.db")
-            logger.info("🗄️  Using local SQLite database (Turso token not set)")
+            _conn = _make_conn()
     except Exception as e:
-        logger.warning(f"libsql not available ({e}), falling back to stdlib sqlite3")
-        import sqlite3
-        _conn = sqlite3.connect("klinik_local.db", check_same_thread=False)
+        logger.warning(f"libsql not available ({e}), using stdlib sqlite3")
+        _conn = _make_conn()
 
     return _conn
 
@@ -78,21 +106,21 @@ async def init_db():
         conn.commit()
 
         # Safe migrations — add columns that may be missing from older schema versions
-        _safe_add_column(conn, "patients",   "phone",            "TEXT")
-        _safe_add_column(conn, "patients",   "age",              "INTEGER")
-        _safe_add_column(conn, "patients",   "sex",              "TEXT")
-        _safe_add_column(conn, "encounters", "patient_name",     "TEXT")
-        _safe_add_column(conn, "encounters", "soap_note",        "TEXT")
-        _safe_add_column(conn, "encounters", "diagnoses",        "TEXT")
-        _safe_add_column(conn, "encounters", "lab_orders",       "TEXT")
-        _safe_add_column(conn, "encounters", "prescriptions",    "TEXT")
-        _safe_add_column(conn, "encounters", "referrals",        "TEXT")
-        _safe_add_column(conn, "encounters", "follow_up",        "TEXT")
-        _safe_add_column(conn, "encounters", "billing",          "TEXT")
+        _safe_add_column(conn, "patients",   "phone",              "TEXT")
+        _safe_add_column(conn, "patients",   "age",                "INTEGER")
+        _safe_add_column(conn, "patients",   "sex",                "TEXT")
+        _safe_add_column(conn, "encounters", "patient_name",       "TEXT")
+        _safe_add_column(conn, "encounters", "soap_note",          "TEXT")
+        _safe_add_column(conn, "encounters", "diagnoses",          "TEXT")
+        _safe_add_column(conn, "encounters", "lab_orders",         "TEXT")
+        _safe_add_column(conn, "encounters", "prescriptions",      "TEXT")
+        _safe_add_column(conn, "encounters", "referrals",          "TEXT")
+        _safe_add_column(conn, "encounters", "follow_up",          "TEXT")
+        _safe_add_column(conn, "encounters", "billing",            "TEXT")
         _safe_add_column(conn, "encounters", "supervisor_summary", "TEXT")
-        _safe_add_column(conn, "encounters", "visit_status",     "TEXT")
-        _safe_add_column(conn, "encounters", "doctor_id",        "TEXT")
-        _safe_add_column(conn, "encounters", "transcript",       "TEXT")
+        _safe_add_column(conn, "encounters", "visit_status",       "TEXT")
+        _safe_add_column(conn, "encounters", "doctor_id",          "TEXT")
+        _safe_add_column(conn, "encounters", "transcript",         "TEXT")
 
         logger.info("🗄️  Database tables ready")
     except Exception as e:
@@ -107,7 +135,6 @@ def _safe_add_column(conn, table: str, column: str, col_type: str):
         logger.info(f"🗄️  Migrated: added {table}.{column}")
     except Exception:
         pass  # Column already exists — safe to ignore
-
 
 
 async def save_clinical_state(state) -> None:
@@ -152,6 +179,7 @@ async def save_clinical_state(state) -> None:
             state.created_at.isoformat(),
         ))
         conn.commit()
+        logger.info(f"🗄️  Saved: {state.patient.name or 'Unknown'} / {state.session_id}")
     except Exception as e:
         logger.error(f"Failed to save clinical state: {e}")
         raise
@@ -169,15 +197,15 @@ def _row_to_encounter(row) -> dict:
         "id": row[0], "patient_id": row[1], "patient_name": row[2],
         "doctor_id": row[3], "transcript": row[4],
         "supervisor_summary": row[5],
-        "soap_note":    _safe_json(row[6], {}),
-        "diagnoses":    _safe_json(row[7], []),
-        "lab_orders":   _safe_json(row[8], []),
+        "soap_note":     _safe_json(row[6], {}),
+        "diagnoses":     _safe_json(row[7], []),
+        "lab_orders":    _safe_json(row[8], []),
         "prescriptions": _safe_json(row[9], []),
-        "referrals":    _safe_json(row[10], []),
-        "follow_up":    _safe_json(row[11], {}),
-        "billing":      _safe_json(row[12], {}),
-        "visit_status": row[13],
-        "created_at":   row[14],
+        "referrals":     _safe_json(row[10], []),
+        "follow_up":     _safe_json(row[11], {}),
+        "billing":       _safe_json(row[12], {}),
+        "visit_status":  row[13],
+        "created_at":    row[14],
     }
 
 
@@ -208,7 +236,6 @@ async def get_patient(patient_id: str) -> Optional[dict]:
         if not row:
             return None
         patient = _row_to_patient(row)
-        # Include encounter history
         enc_cursor = conn.execute(
             "SELECT * FROM encounters WHERE patient_id = ? ORDER BY created_at DESC",
             (patient_id,)
