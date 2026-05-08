@@ -188,39 +188,51 @@ async def save_clinical_state(state) -> None:
         raise
 
 
+# Explicit column order for SELECT queries (used in all read functions below).
+# By listing columns explicitly in SELECT, the result order is always predictable
+# regardless of table migration order or connection type (sqlite3, libsql, etc.).
+_PATIENT_COLS  = ["id", "name", "age", "sex", "phone", "created_at"]
+_ENCOUNTER_COLS = [
+    "id", "patient_id", "patient_name", "doctor_id", "transcript",
+    "supervisor_summary", "soap_note", "diagnoses", "lab_orders",
+    "prescriptions", "referrals", "follow_up", "billing", "visit_status", "created_at",
+]
+
+_ENCOUNTER_SELECT = ", ".join(f"e.{c}" for c in _ENCOUNTER_COLS)
+_ENCOUNTER_SELECT_BARE = ", ".join(_ENCOUNTER_COLS)
+
+
 def _row_to_patient(row) -> dict:
-    """Convert a sqlite3.Row to a patient dict using named column access."""
-    d = dict(row)
+    """Convert a row tuple to a patient dict. Positional — driven by explicit SELECT."""
     return {
-        "id":           d.get("id"),
-        "name":         d.get("name"),
-        "age":          d.get("age"),
-        "sex":          d.get("sex"),
-        "phone":        d.get("phone"),
-        "created_at":   d.get("created_at"),
-        "encounter_count": d.get("encounter_count", 0),
+        "id":              row[0],
+        "name":            row[1],
+        "age":             row[2],
+        "sex":             row[3],
+        "phone":           row[4],
+        "created_at":      row[5],
+        "encounter_count": row[6] if len(row) > 6 else 0,
     }
 
 
 def _row_to_encounter(row) -> dict:
-    """Convert a sqlite3.Row to an encounter dict using named column access."""
-    d = dict(row)
+    """Convert a row tuple to an encounter dict. Positional — driven by explicit SELECT."""
     return {
-        "id":                d.get("id"),
-        "patient_id":        d.get("patient_id"),
-        "patient_name":      d.get("patient_name") or "Unknown Patient",
-        "doctor_id":         d.get("doctor_id"),
-        "transcript":        d.get("transcript"),
-        "supervisor_summary": d.get("supervisor_summary"),
-        "soap_note":         _safe_json(d.get("soap_note"), {}),
-        "diagnoses":         _safe_json(d.get("diagnoses"), []),
-        "lab_orders":        _safe_json(d.get("lab_orders"), []),
-        "prescriptions":     _safe_json(d.get("prescriptions"), []),
-        "referrals":         _safe_json(d.get("referrals"), []),
-        "follow_up":         _safe_json(d.get("follow_up"), {}),
-        "billing":           _safe_json(d.get("billing"), {}),
-        "visit_status":      d.get("visit_status"),
-        "created_at":        d.get("created_at"),
+        "id":                row[0],
+        "patient_id":        row[1],
+        "patient_name":      row[2] or "Unknown Patient",
+        "doctor_id":         row[3],
+        "transcript":        row[4],
+        "supervisor_summary": row[5],
+        "soap_note":         _safe_json(row[6], {}),
+        "diagnoses":         _safe_json(row[7], []),
+        "lab_orders":        _safe_json(row[8], []),
+        "prescriptions":     _safe_json(row[9], []),
+        "referrals":         _safe_json(row[10], []),
+        "follow_up":         _safe_json(row[11], {}),
+        "billing":           _safe_json(row[12], {}),
+        "visit_status":      row[13],
+        "created_at":        row[14],
     }
 
 
@@ -277,10 +289,13 @@ async def get_patient(patient_id: str) -> Optional[dict]:
             "sex": row[3], "phone": row[4], "created_at": row[5],
             "encounter_count": row[6],
         }
-        enc_cursor = conn.execute(
-            "SELECT * FROM encounters WHERE patient_id = ? ORDER BY created_at DESC",
-            (patient_id,)
-        )
+        # Explicit columns — immune to ALTER TABLE migration order
+        enc_cursor = conn.execute("""
+            SELECT id, patient_id, patient_name, doctor_id, transcript,
+                   supervisor_summary, soap_note, diagnoses, lab_orders,
+                   prescriptions, referrals, follow_up, billing, visit_status, created_at
+            FROM encounters WHERE patient_id = ? ORDER BY created_at DESC
+        """, (patient_id,))
         patient["encounters"] = [_row_to_encounter(r) for r in enc_cursor.fetchall()]
         return patient
     except Exception as e:
@@ -291,7 +306,12 @@ async def get_patient(patient_id: str) -> Optional[dict]:
 async def get_all_encounters() -> list[dict]:
     conn = await _get_conn()
     try:
-        cursor = conn.execute("SELECT * FROM encounters ORDER BY created_at DESC")
+        cursor = conn.execute("""
+            SELECT id, patient_id, patient_name, doctor_id, transcript,
+                   supervisor_summary, soap_note, diagnoses, lab_orders,
+                   prescriptions, referrals, follow_up, billing, visit_status, created_at
+            FROM encounters ORDER BY created_at DESC
+        """)
         return [_row_to_encounter(r) for r in cursor.fetchall()]
     except Exception as e:
         logger.error(f"get_all_encounters error: {e}")
@@ -301,7 +321,12 @@ async def get_all_encounters() -> list[dict]:
 async def get_encounter(encounter_id: str) -> Optional[dict]:
     conn = await _get_conn()
     try:
-        cursor = conn.execute("SELECT * FROM encounters WHERE id = ?", (encounter_id,))
+        cursor = conn.execute("""
+            SELECT id, patient_id, patient_name, doctor_id, transcript,
+                   supervisor_summary, soap_note, diagnoses, lab_orders,
+                   prescriptions, referrals, follow_up, billing, visit_status, created_at
+            FROM encounters WHERE id = ?
+        """, (encounter_id,))
         row = cursor.fetchone()
         return _row_to_encounter(row) if row else None
     except Exception as e:
