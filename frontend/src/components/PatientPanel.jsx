@@ -111,7 +111,10 @@ export default function PatientPanel({ patients, activePatient, setActivePatient
         <div className="patient-stats-grid">
           <div className="stat-box">
             <IconUser />
-            <div className="stat-value">{p.age || '--'}<span>{p.sex || ''}</span></div>
+            <div className="stat-value">
+              {p.age ? `${p.age} yrs` : '--'}
+              {p.sex && p.sex !== 'Unknown' && p.sex !== 'unknown' ? <span> {p.sex}</span> : null}
+            </div>
             <div className="stat-label">Age</div>
           </div>
           <div className="stat-box">
@@ -121,7 +124,7 @@ export default function PatientPanel({ patients, activePatient, setActivePatient
           </div>
           <div className="stat-box">
             <IconCalendar />
-            <div className="stat-value">{p.encounter_count || 0}</div>
+            <div className="stat-value">{p.encounter_count || p.encounters?.length || 0}</div>
             <div className="stat-label">Encounters</div>
           </div>
         </div>
