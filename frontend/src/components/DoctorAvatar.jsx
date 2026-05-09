@@ -248,19 +248,26 @@ export default function DoctorAvatar({ audioB64, summary, isSpeaking, onDone, on
             </svg>
           </div>
 
-          {/* Tap-to-play hint on mobile if autoplay was blocked */}
+          {/* Tap-to-play overlay — shown when autoplay was blocked by browser */}
           {audioB64 && !speaking && (
-            <div style={{
-              position:'absolute', bottom:-2, right:-2,
-              background:'var(--accent)', borderRadius:'50%',
-              width:22, height:22,
-              display:'flex', alignItems:'center', justifyContent:'center',
-              fontSize:11, boxShadow:'0 0 8px rgba(167,139,250,0.5)',
-              cursor:'pointer'
-            }}
+            <div
+              style={{
+                position: 'absolute', inset: 0,
+                borderRadius: '50%',
+                display: 'flex', flexDirection: 'column',
+                alignItems: 'center', justifyContent: 'center',
+                background: 'rgba(15,10,30,0.72)',
+                cursor: 'pointer',
+                animation: 'da-speaking 1.2s ease-in-out infinite',
+              }}
               onClick={() => audioRef.current?.play().catch(() => {})}
-              title="Tap to play"
-            >▶</div>
+            >
+              <div style={{ fontSize: 28, lineHeight: 1 }}>▶</div>
+              <div style={{
+                fontSize: 9, fontWeight: 800, letterSpacing: '0.1em',
+                color: '#A78BFA', textTransform: 'uppercase', marginTop: 4,
+              }}>Tap to hear</div>
+            </div>
           )}
         </div>
 
