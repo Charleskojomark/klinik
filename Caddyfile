@@ -1,0 +1,62 @@
+klinik.charlesmark.xyz {
+    # ── Security headers ─────────────────────────
+    header {
+        -Server
+        -X-Powered-By
+        Strict-Transport-Security "max-age=31536000; includeSubDomains"
+        X-Content-Type-Options "nosniff"
+        X-Frame-Options "SAMEORIGIN"
+        Referrer-Policy "strict-origin-when-cross-origin"
+    }
+
+    # ── API routes → FastAPI backend ─────────────
+    # NEVER cache API responses — clinical data must always be fresh
+    handle /api/* {
+        header Cache-Control "no-cache, no-store, must-revalidate"
+        header Pragma "no-cache"
+        header Expires "0"
+
+        reverse_proxy localhost:8080 {
+            header_up X-Real-IP        {remote_host}
+            header_up X-Forwarded-For  {remote_host}
+            header_up X-Forwarded-Proto {scheme}
+            header_up Host             {host}
+
+            # Flush immediately — avoids buffering long LLM responses
+            flush_interval -1
+
+            transport http {
+                dial_timeout            5s
+                # LLM consultation can take 30–90s; don't time out early
+                response_header_timeout 120s
+                tls_insecure_skip_verify
+            }
+        }
+    }
+
+    # ── Metrics endpoint (internal only, no cache) ──
+    handle /metrics* {
+        header Cache-Control "no-cache, no-store, must-revalidate"
+        reverse_proxy localhost:8080
+    }
+
+    # ── Frontend static assets ───────────────────
+    # Let the nginx inside the frontend container manage its own cache headers.
+    # Vite fingerprints JS/CSS filenames — nginx already sets 1y cache on those.
+    # index.html has no-cache set in nginx.conf — both are correct.
+    handle {
+        reverse_proxy localhost:3000 {
+            header_up X-Real-IP        {remote_host}
+            header_up X-Forwarded-For  {remote_host}
+            header_up X-Forwarded-Proto {scheme}
+        }
+    }
+
+    # ── Logging ──────────────────────────────────
+    log {
+        output file /var/log/caddy/klinik.access.log {
+            roll_size 10mb
+            roll_keep 5
+        }
+    }
+}
