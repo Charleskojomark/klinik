@@ -47,9 +47,11 @@ def _safe_vitals(v: dict) -> VitalSigns:
         blood_pressure=str(v["blood_pressure"]) if v.get("blood_pressure") else None,
         heart_rate=_to_int(v.get("heart_rate")),
         temperature=_to_float(v.get("temperature")),
+        temperature_unit=str(v["temperature_unit"]) if v.get("temperature_unit") else None,
         respiratory_rate=_to_int(v.get("respiratory_rate")),
         spo2=_to_int(v.get("spo2")),
         weight=_to_float(v.get("weight")),
+        weight_unit=str(v["weight_unit"]) if v.get("weight_unit") else None,
     )
 
 
@@ -62,7 +64,7 @@ IMPORTANT: Extract exactly what the doctor says. Do not infer or add information
 Return valid JSON with these fields:
 {
   "patient": {"name": "", "age": null, "sex": ""},
-  "vitals": {"blood_pressure": "", "heart_rate": null, "temperature": null},
+  "vitals": {"blood_pressure": "", "heart_rate": null, "temperature": null, "temperature_unit": "C|F", "weight": null, "weight_unit": "kg|lbs"},
   "symptoms": [],
   "diagnoses": [],
   "clinical_plan": "",

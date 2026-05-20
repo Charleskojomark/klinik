@@ -38,6 +38,7 @@ class VisitStatus(str, Enum):
 
 class PatientInfo(BaseModel):
     patient_id: str = Field(default_factory=lambda: f"pt-{uuid.uuid4().hex[:8]}")
+    tenant_id: str = "default_tenant"
     name: Optional[str] = None
     age: Optional[int] = None
     sex: Optional[str] = None
@@ -49,9 +50,11 @@ class VitalSigns(BaseModel):
     blood_pressure: Optional[str] = None
     heart_rate: Optional[int] = None
     temperature: Optional[float] = None
+    temperature_unit: Optional[str] = None
     respiratory_rate: Optional[int] = None
     spo2: Optional[int] = None
     weight: Optional[float] = None
+    weight_unit: Optional[str] = None
 
 
 class SOAPNote(BaseModel):
@@ -77,6 +80,7 @@ class Prescription(BaseModel):
     duration: str = ""
     route: str = "oral"
     instructions: str = ""
+    interaction_warnings: list[str] = Field(default_factory=list)
 
     def __init__(self, **data):
         # normalise: accept either 'drug_name' or 'medication'
@@ -132,9 +136,12 @@ class ClinicalState(BaseModel):
     """
     # Identity
     session_id: str = Field(default_factory=lambda: f"session-{uuid.uuid4().hex[:8]}")
+    tenant_id: str = "default_tenant"
     doctor_id: str = "dr-default"
     created_at: datetime = Field(default_factory=datetime.utcnow)
     visit_status: VisitStatus = VisitStatus.IN_PROGRESS
+    is_signed_off: bool = False
+    signed_by_doctor_id: Optional[str] = None
 
     # Input
     transcript: str = ""

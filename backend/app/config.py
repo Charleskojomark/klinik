@@ -31,9 +31,9 @@ class Settings(BaseSettings):
     database_url: str = "libsql://amd-mkcharles.aws-us-east-2.turso.io"
     turso_auth_token: str = ""
 
-    # ── LLM (vLLM / OpenAI-compatible) ──
-    vllm_base_url: str = "http://localhost:8000/v1"
-    llm_model: str = "meta-llama/Llama-3.1-70B-Instruct"
+    # ── LLM (Hugging Face Serverless / OpenAI-compatible) ──
+    vllm_base_url: str = "https://api-inference.huggingface.co/models/meta-llama/Meta-Llama-3-8B-Instruct/v1"
+    llm_model: str = "meta-llama/Meta-Llama-3-8B-Instruct"
     hf_token: str = ""
 
     # ── Redis ──

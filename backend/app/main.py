@@ -14,9 +14,10 @@ import json
 import logging
 import uuid
 import asyncio
+import time
 from collections import OrderedDict
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, HTTPException, BackgroundTasks
+from fastapi import FastAPI, HTTPException, BackgroundTasks, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
@@ -105,6 +106,27 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.middleware("http")
+async def audit_log_middleware(request: Request, call_next):
+    start_time = time.time()
+    response = await call_next(request)
+    duration_ms = (time.time() - start_time) * 1000
+    
+    # Run audit logging in background to avoid blocking
+    if request.url.path.startswith("/api/"):
+        from app.models.database import log_audit_event
+        asyncio.create_task(
+            log_audit_event(
+                ip_address=request.client.host if request.client else "unknown",
+                endpoint=request.url.path,
+                method=request.method,
+                status_code=response.status_code,
+                duration_ms=duration_ms
+            )
+        )
+    return response
 
 
 # ──────────────────────────────────────────────
@@ -259,6 +281,26 @@ async def get_session(session_id: str):
     if session_id not in sessions:
         raise HTTPException(status_code=404, detail="Session not found")
     return sessions[session_id]
+
+
+@app.put("/api/sessions/{session_id}", response_model=ClinicalState)
+async def update_session(session_id: str, updated_state: ClinicalState):
+    """
+    Update the persisted clinical state after the doctor reviews and edits it.
+    """
+    sessions[session_id] = updated_state
+    try:
+        await save_clinical_state(updated_state)
+    except Exception as e:
+        logger.error(f"Failed to persist updated session {session_id}: {e}")
+        raise HTTPException(status_code=500, detail=f"Database save error: {e}")
+
+    event_bus = await get_event_bus()
+    await event_bus.publish_agent_event(
+        session_id, "workflow", "committed", output=updated_state.supervisor_summary
+    )
+
+    return updated_state
 
 
 @app.get("/api/sessions/{session_id}/agents")

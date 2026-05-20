@@ -80,6 +80,7 @@ async def init_db():
         conn.execute("""
             CREATE TABLE IF NOT EXISTS patients (
                 id TEXT PRIMARY KEY,
+                tenant_id TEXT,
                 name TEXT,
                 age INTEGER,
                 sex TEXT,
@@ -90,6 +91,7 @@ async def init_db():
         conn.execute("""
             CREATE TABLE IF NOT EXISTS encounters (
                 id TEXT PRIMARY KEY,
+                tenant_id TEXT,
                 patient_id TEXT,
                 patient_name TEXT,
                 doctor_id TEXT,
@@ -103,15 +105,30 @@ async def init_db():
                 follow_up TEXT,
                 billing TEXT,
                 visit_status TEXT,
+                is_signed_off BOOLEAN,
+                signed_by_doctor_id TEXT,
                 created_at TEXT
+            )
+        """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS audit_logs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                timestamp TEXT,
+                ip_address TEXT,
+                endpoint TEXT,
+                method TEXT,
+                status_code INTEGER,
+                duration_ms REAL
             )
         """)
         conn.commit()
 
         # Safe migrations — add columns that may be missing from older schema versions
+        _safe_add_column(conn, "patients",   "tenant_id",          "TEXT")
         _safe_add_column(conn, "patients",   "phone",              "TEXT")
         _safe_add_column(conn, "patients",   "age",                "INTEGER")
         _safe_add_column(conn, "patients",   "sex",                "TEXT")
+        _safe_add_column(conn, "encounters", "tenant_id",          "TEXT")
         _safe_add_column(conn, "encounters", "patient_name",       "TEXT")
         _safe_add_column(conn, "encounters", "soap_note",          "TEXT")
         _safe_add_column(conn, "encounters", "diagnoses",          "TEXT")
@@ -124,6 +141,8 @@ async def init_db():
         _safe_add_column(conn, "encounters", "visit_status",       "TEXT")
         _safe_add_column(conn, "encounters", "doctor_id",          "TEXT")
         _safe_add_column(conn, "encounters", "transcript",         "TEXT")
+        _safe_add_column(conn, "encounters", "is_signed_off",      "BOOLEAN")
+        _safe_add_column(conn, "encounters", "signed_by_doctor_id","TEXT")
 
         logger.info("🗄️  Database tables ready")
     except Exception as e:
@@ -146,10 +165,11 @@ async def save_clinical_state(state) -> None:
     try:
         # Upsert patient
         conn.execute("""
-            INSERT OR REPLACE INTO patients (id, name, age, sex, phone, created_at)
-            VALUES (?, ?, ?, ?, ?, ?)
+            INSERT OR REPLACE INTO patients (id, tenant_id, name, age, sex, phone, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
         """, (
             state.patient.patient_id,
+            state.patient.tenant_id,
             state.patient.name or "Unknown Patient",
             state.patient.age,
             state.patient.sex or "Unknown",
@@ -160,12 +180,13 @@ async def save_clinical_state(state) -> None:
         # Upsert encounter
         conn.execute("""
             INSERT OR REPLACE INTO encounters
-            (id, patient_id, patient_name, doctor_id, transcript, supervisor_summary,
+            (id, tenant_id, patient_id, patient_name, doctor_id, transcript, supervisor_summary,
              soap_note, diagnoses, lab_orders, prescriptions, referrals, follow_up, billing,
-             visit_status, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+             visit_status, is_signed_off, signed_by_doctor_id, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             state.session_id,
+            state.tenant_id,
             state.patient.patient_id,
             state.patient.name or "Unknown Patient",
             state.doctor_id,
@@ -179,6 +200,8 @@ async def save_clinical_state(state) -> None:
             json.dumps(state.follow_up.model_dump()),
             json.dumps(state.billing.model_dump()),
             state.visit_status.value,
+            state.is_signed_off,
+            state.signed_by_doctor_id,
             state.created_at.isoformat(),
         ))
         conn.commit()
@@ -188,14 +211,35 @@ async def save_clinical_state(state) -> None:
         raise
 
 
+async def log_audit_event(ip_address: str, endpoint: str, method: str, status_code: int, duration_ms: float) -> None:
+    """Immutable audit logging for compliance."""
+    conn = await _get_conn()
+    try:
+        conn.execute("""
+            INSERT INTO audit_logs (timestamp, ip_address, endpoint, method, status_code, duration_ms)
+            VALUES (?, ?, ?, ?, ?, ?)
+        """, (
+            datetime.utcnow().isoformat(),
+            ip_address,
+            endpoint,
+            method,
+            status_code,
+            duration_ms
+        ))
+        conn.commit()
+    except Exception as e:
+        logger.error(f"Failed to write audit log: {e}")
+
+
 # Explicit column order for SELECT queries (used in all read functions below).
 # By listing columns explicitly in SELECT, the result order is always predictable
 # regardless of table migration order or connection type (sqlite3, libsql, etc.).
-_PATIENT_COLS  = ["id", "name", "age", "sex", "phone", "created_at"]
+_PATIENT_COLS  = ["id", "tenant_id", "name", "age", "sex", "phone", "created_at"]
 _ENCOUNTER_COLS = [
-    "id", "patient_id", "patient_name", "doctor_id", "transcript",
+    "id", "tenant_id", "patient_id", "patient_name", "doctor_id", "transcript",
     "supervisor_summary", "soap_note", "diagnoses", "lab_orders",
-    "prescriptions", "referrals", "follow_up", "billing", "visit_status", "created_at",
+    "prescriptions", "referrals", "follow_up", "billing", "visit_status", 
+    "is_signed_off", "signed_by_doctor_id", "created_at",
 ]
 
 _ENCOUNTER_SELECT = ", ".join(f"e.{c}" for c in _ENCOUNTER_COLS)
@@ -206,12 +250,13 @@ def _row_to_patient(row) -> dict:
     """Convert a row tuple to a patient dict. Positional — driven by explicit SELECT."""
     return {
         "id":              row[0],
-        "name":            row[1],
-        "age":             row[2],
-        "sex":             row[3],
-        "phone":           row[4],
-        "created_at":      row[5],
-        "encounter_count": row[6] if len(row) > 6 else 0,
+        "tenant_id":       row[1],
+        "name":            row[2],
+        "age":             row[3],
+        "sex":             row[4],
+        "phone":           row[5],
+        "created_at":      row[6],
+        "encounter_count": row[7] if len(row) > 7 else 0,
     }
 
 
@@ -219,20 +264,23 @@ def _row_to_encounter(row) -> dict:
     """Convert a row tuple to an encounter dict. Positional — driven by explicit SELECT."""
     return {
         "id":                row[0],
-        "patient_id":        row[1],
-        "patient_name":      row[2] or "Unknown Patient",
-        "doctor_id":         row[3],
-        "transcript":        row[4],
-        "supervisor_summary": row[5],
-        "soap_note":         _safe_json(row[6], {}),
-        "diagnoses":         _safe_json(row[7], []),
-        "lab_orders":        _safe_json(row[8], []),
-        "prescriptions":     _safe_json(row[9], []),
-        "referrals":         _safe_json(row[10], []),
-        "follow_up":         _safe_json(row[11], {}),
-        "billing":           _safe_json(row[12], {}),
-        "visit_status":      row[13],
-        "created_at":        row[14],
+        "tenant_id":         row[1],
+        "patient_id":        row[2],
+        "patient_name":      row[3] or "Unknown Patient",
+        "doctor_id":         row[4],
+        "transcript":        row[5],
+        "supervisor_summary": row[6],
+        "soap_note":         _safe_json(row[7], {}),
+        "diagnoses":         _safe_json(row[8], []),
+        "lab_orders":        _safe_json(row[9], []),
+        "prescriptions":     _safe_json(row[10], []),
+        "referrals":         _safe_json(row[11], []),
+        "follow_up":         _safe_json(row[12], {}),
+        "billing":           _safe_json(row[13], {}),
+        "visit_status":      row[14],
+        "is_signed_off":     bool(row[15]),
+        "signed_by_doctor_id": row[16],
+        "created_at":        row[17],
     }
 
 
@@ -250,7 +298,7 @@ async def get_all_patients() -> list[dict]:
     try:
         # LEFT JOIN to get encounter count without a separate query per patient
         cursor = conn.execute("""
-            SELECT p.id, p.name, p.age, p.sex, p.phone, p.created_at,
+            SELECT p.id, p.tenant_id, p.name, p.age, p.sex, p.phone, p.created_at,
                    COUNT(e.id) AS encounter_count
             FROM patients p
             LEFT JOIN encounters e ON e.patient_id = p.id
@@ -259,9 +307,9 @@ async def get_all_patients() -> list[dict]:
         """)
         return [
             {
-                "id": r[0], "name": r[1], "age": r[2],
-                "sex": r[3], "phone": r[4], "created_at": r[5],
-                "encounter_count": r[6],
+                "id": r[0], "tenant_id": r[1], "name": r[2], "age": r[3],
+                "sex": r[4], "phone": r[5], "created_at": r[6],
+                "encounter_count": r[7],
             }
             for r in cursor.fetchall()
         ]
@@ -274,7 +322,7 @@ async def get_patient(patient_id: str) -> Optional[dict]:
     conn = await _get_conn()
     try:
         cursor = conn.execute("""
-            SELECT p.id, p.name, p.age, p.sex, p.phone, p.created_at,
+            SELECT p.id, p.tenant_id, p.name, p.age, p.sex, p.phone, p.created_at,
                    COUNT(e.id) AS encounter_count
             FROM patients p
             LEFT JOIN encounters e ON e.patient_id = p.id
@@ -285,15 +333,16 @@ async def get_patient(patient_id: str) -> Optional[dict]:
         if not row:
             return None
         patient = {
-            "id": row[0], "name": row[1], "age": row[2],
-            "sex": row[3], "phone": row[4], "created_at": row[5],
-            "encounter_count": row[6],
+            "id": row[0], "tenant_id": row[1], "name": row[2], "age": row[3],
+            "sex": row[4], "phone": row[5], "created_at": row[6],
+            "encounter_count": row[7],
         }
         # Explicit columns — immune to ALTER TABLE migration order
         enc_cursor = conn.execute("""
-            SELECT id, patient_id, patient_name, doctor_id, transcript,
+            SELECT id, tenant_id, patient_id, patient_name, doctor_id, transcript,
                    supervisor_summary, soap_note, diagnoses, lab_orders,
-                   prescriptions, referrals, follow_up, billing, visit_status, created_at
+                   prescriptions, referrals, follow_up, billing, visit_status, 
+                   is_signed_off, signed_by_doctor_id, created_at
             FROM encounters WHERE patient_id = ? ORDER BY created_at DESC
         """, (patient_id,))
         patient["encounters"] = [_row_to_encounter(r) for r in enc_cursor.fetchall()]
@@ -307,9 +356,10 @@ async def get_all_encounters() -> list[dict]:
     conn = await _get_conn()
     try:
         cursor = conn.execute("""
-            SELECT id, patient_id, patient_name, doctor_id, transcript,
+            SELECT id, tenant_id, patient_id, patient_name, doctor_id, transcript,
                    supervisor_summary, soap_note, diagnoses, lab_orders,
-                   prescriptions, referrals, follow_up, billing, visit_status, created_at
+                   prescriptions, referrals, follow_up, billing, visit_status, 
+                   is_signed_off, signed_by_doctor_id, created_at
             FROM encounters ORDER BY created_at DESC
         """)
         return [_row_to_encounter(r) for r in cursor.fetchall()]
@@ -322,9 +372,10 @@ async def get_encounter(encounter_id: str) -> Optional[dict]:
     conn = await _get_conn()
     try:
         cursor = conn.execute("""
-            SELECT id, patient_id, patient_name, doctor_id, transcript,
+            SELECT id, tenant_id, patient_id, patient_name, doctor_id, transcript,
                    supervisor_summary, soap_note, diagnoses, lab_orders,
-                   prescriptions, referrals, follow_up, billing, visit_status, created_at
+                   prescriptions, referrals, follow_up, billing, visit_status, 
+                   is_signed_off, signed_by_doctor_id, created_at
             FROM encounters WHERE id = ?
         """, (encounter_id,))
         row = cursor.fetchone()
