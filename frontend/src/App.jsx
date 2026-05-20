@@ -301,7 +301,7 @@ export default function App() {
             <div className="splash-content">
               <div className="splash-logo-ring">
                 <svg viewBox="0 0 48 48" fill="none" width="52" height="52">
-                  <rect x="3" y="3" width="42" height="42" rx="16" fill="rgba(167,139,250,0.12)" stroke="var(--accent)" strokeWidth="2.5"/>
+                  <rect x="3" y="3" width="42" height="42" rx="16" fill="var(--accent-light)" stroke="var(--accent)" strokeWidth="2.5"/>
                   <path d="M24 13v22M13 24h22" stroke="var(--accent)" strokeWidth="3.5" strokeLinecap="round"/>
                 </svg>
               </div>
@@ -312,12 +312,12 @@ export default function App() {
               <div className="splash-sub">AI-Powered Clinical Workflow · AMD MI300X</div>
             </div>
           </div>
-        )}
+        )/* ── Splash Screen ── */}
         {/* Header */}
         <header className="app-header">
           <div className="header-left" onClick={() => { reset(); setPage('home'); }} style={{cursor:'pointer'}}>
-            <svg viewBox="0 0 32 32" fill="none" style={{width:30,height:30,filter:'drop-shadow(0 0 8px rgba(167,139,250,0.6))',flexShrink:0}}>
-              <rect x="2" y="2" width="28" height="28" rx="10" fill="rgba(167,139,250,0.12)" stroke="var(--accent)" strokeWidth="2" />
+            <svg viewBox="0 0 32 32" fill="none" style={{width:30,height:30,filter:'drop-shadow(0 0 8px var(--accent-border))',flexShrink:0}}>
+              <rect x="2" y="2" width="28" height="28" rx="10" fill="var(--accent-light)" stroke="var(--accent)" strokeWidth="2" />
               <path d="M7 16 H12 L14 10 L18 22 L20 16 H25" stroke="var(--accent)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
               <circle cx="16" cy="16" r="2" fill="#fff" />
             </svg>
@@ -363,7 +363,7 @@ export default function App() {
         </header>
 
         {/* Clinical Ribbon: Patient Context Banner */}
-        <div className="clinical-ribbon">
+        <div className="clinical-ribbon" onClick={() => setPage('patients')} title="Click to Select or Create Patient">
           <div className="ribbon-patient-info">
             <div style={{
               width: 32, height: 32, borderRadius: '50%',
@@ -381,7 +381,7 @@ export default function App() {
                     {activePatient.age ? `${activePatient.age} yo` : '--'} • {activePatient.sex || '--'} • {activePatient.phone || 'No phone'}
                   </>
                 ) : (
-                  'Use the right workspace to select a patient, then hold the mic to record.'
+                  'Click here or use the panel on the right to select/create a patient before recording.'
                 )}
               </div>
             </div>
@@ -519,8 +519,8 @@ export default function App() {
           <div className="splash-content">
             <div className="splash-logo-ring">
               <svg viewBox="0 0 48 48" fill="none" width="52" height="52">
-                <rect x="3" y="3" width="42" height="42" rx="16" fill="rgba(167,139,250,0.12)" stroke="#A78BFA" strokeWidth="2.5"/>
-                <path d="M24 13v22M13 24h22" stroke="#A78BFA" strokeWidth="3.5" strokeLinecap="round"/>
+                <rect x="3" y="3" width="42" height="42" rx="16" fill="var(--accent-light)" stroke="var(--accent)" strokeWidth="2.5"/>
+                <path d="M24 13v22M13 24h22" stroke="var(--accent)" strokeWidth="3.5" strokeLinecap="round"/>
               </svg>
             </div>
             <div className="splash-brand">KLINIK</div>
@@ -534,8 +534,8 @@ export default function App() {
       {/* Header */}
       <header className="app-header">
         <div className="header-left" onClick={() => { reset(); setPage('home'); }} style={{cursor:'pointer'}}>
-          <svg viewBox="0 0 32 32" fill="none" style={{width:30,height:30,filter:'drop-shadow(0 0 8px rgba(167,139,250,0.6))',flexShrink:0}}>
-            <rect x="2" y="2" width="28" height="28" rx="10" fill="rgba(167,139,250,0.12)" stroke="var(--accent)" strokeWidth="2" />
+          <svg viewBox="0 0 32 32" fill="none" style={{width:30,height:30,filter:'drop-shadow(0 0 8px var(--accent-border))',flexShrink:0}}>
+            <rect x="2" y="2" width="28" height="28" rx="10" fill="var(--accent-light)" stroke="var(--accent)" strokeWidth="2" />
             <path d="M7 16 H12 L14 10 L18 22 L20 16 H25" stroke="var(--accent)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
             <circle cx="16" cy="16" r="2" fill="#fff" />
           </svg>
