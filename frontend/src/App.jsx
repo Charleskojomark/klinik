@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import PatientPanel from './components/PatientPanel.jsx'
 import DoctorAvatar from './components/DoctorAvatar.jsx'
 import AudioVisualizer from './components/AudioVisualizer.jsx'
+import CitLReview from './components/CitLReview.jsx'
 
 const API = '/api'
 
@@ -55,7 +56,7 @@ export default function App() {
   const [showSplash,     setShowSplash]    = useState(true)
   const [splashOut,      setSplashOut]     = useState(false)
   const [page,           setPage]          = useState('home')
-  const [phase,          setPhase]         = useState('idle')     // idle|recording|processing|complete
+  const [phase,          setPhase]         = useState('idle')     // idle|recording|processing|complete|review
   const [finalTx,        setFinalTx]       = useState('')
   const [interimTx,      setInterimTx]     = useState('')
   const [agentStatus,    setAgentStatus]   = useState({})
@@ -65,6 +66,21 @@ export default function App() {
   const [srError,        setSrError]       = useState(null)
   const [pendingResult,  setPendingResult] = useState(null)
   const [audioB64,       setAudioB64]      = useState(null)  // Deepgram MP3 base64
+
+  // ── Theme / Widescreen State ──
+  const [theme,          setTheme]         = useState(() => localStorage.getItem('theme') || 'light')
+  const [isDesktop,      setIsDesktop]     = useState(window.innerWidth >= 1024)
+
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme)
+    localStorage.setItem('theme', theme)
+  }, [theme])
+
+  useEffect(() => {
+    const handleResize = () => setIsDesktop(window.innerWidth >= 1024)
+    window.addEventListener('resize', handleResize)
+    return () => window.removeEventListener('resize', handleResize)
+  }, [])
 
   // ── Database State ──
   const [patients,       setPatients]      = useState([])
@@ -276,6 +292,225 @@ export default function App() {
   const fullTx = (finalTx + ' ' + interimTx).trim()
   const doneCount = Object.values(agentStatus).filter(s => s === 'done').length
 
+  if (isDesktop) {
+    return (
+      <div className="mobile-shell">
+        {/* ── Splash Screen ── */}
+        {showSplash && (
+          <div className={`splash-overlay ${splashOut ? 'splash-out' : ''}`}>
+            <div className="splash-content">
+              <div className="splash-logo-ring">
+                <svg viewBox="0 0 48 48" fill="none" width="52" height="52">
+                  <rect x="3" y="3" width="42" height="42" rx="16" fill="rgba(167,139,250,0.12)" stroke="var(--accent)" strokeWidth="2.5"/>
+                  <path d="M24 13v22M13 24h22" stroke="var(--accent)" strokeWidth="3.5" strokeLinecap="round"/>
+                </svg>
+              </div>
+              <div className="splash-brand">KLINIK</div>
+              <div className="splash-tagline">
+                Give doctors back their time.<br/>Give patients back their doctor.
+              </div>
+              <div className="splash-sub">AI-Powered Clinical Workflow · AMD MI300X</div>
+            </div>
+          </div>
+        )}
+        {/* Header */}
+        <header className="app-header">
+          <div className="header-left" onClick={() => { reset(); setPage('home'); }} style={{cursor:'pointer'}}>
+            <svg viewBox="0 0 32 32" fill="none" style={{width:30,height:30,filter:'drop-shadow(0 0 8px rgba(167,139,250,0.6))',flexShrink:0}}>
+              <rect x="2" y="2" width="28" height="28" rx="10" fill="rgba(167,139,250,0.12)" stroke="var(--accent)" strokeWidth="2" />
+              <path d="M7 16 H12 L14 10 L18 22 L20 16 H25" stroke="var(--accent)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+              <circle cx="16" cy="16" r="2" fill="#fff" />
+            </svg>
+            <span className="header-logo-text">KLINIK</span>
+          </div>
+          {phase !== 'idle' && (
+            <div className="header-center">
+              <div className="header-patient-name">{activePatient ? activePatient.name : 'New Patient'} — Active</div>
+              <div className="center-orb-wrapper">
+                <AudioVisualizer stream={recRef.current?.stream} isActive={phase === 'recording'} />
+              </div>
+              <div className="header-patient-sub">
+                {phase === 'recording' ? '● Recording' : phase === 'processing' ? `${doneCount}/${AGENTS.length} agents` : 'Complete'}
+              </div>
+            </div>
+          )}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <button 
+              className="theme-switch-btn"
+              onClick={() => setTheme(prev => prev === 'light' ? 'dark' : 'light')}
+              title="Toggle theme"
+            >
+              {theme === 'light' ? (
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{width:18,height:18}}>
+                  <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+                </svg>
+              ) : (
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{width:18,height:18}}>
+                  <circle cx="12" cy="12" r="5" />
+                  <line x1="12" y1="1" x2="12" y2="3" />
+                  <line x1="12" y1="21" x2="12" y2="23" />
+                  <line x1="4.22" y1="4.22" x2="5.64" y2="5.64" />
+                  <line x1="18.36" y1="18.36" x2="19.78" y2="19.78" />
+                  <line x1="1" y1="12" x2="3" y2="12" />
+                  <line x1="21" y1="12" x2="23" y2="12" />
+                  <line x1="4.22" y1="19.78" x2="5.64" y2="18.36" />
+                  <line x1="18.36" y1="5.64" x2="19.78" y2="4.22" />
+                </svg>
+              )}
+            </button>
+            <div className="header-gear" onClick={() => setPage('settings')} style={{cursor:'pointer'}}><IconGear /></div>
+          </div>
+        </header>
+
+        {/* Clinical Ribbon: Patient Context Banner */}
+        <div className="clinical-ribbon">
+          <div className="ribbon-patient-info">
+            <div style={{
+              width: 32, height: 32, borderRadius: '50%',
+              background: 'linear-gradient(135deg, var(--accent-dim), var(--accent))',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              color: '#fff', fontWeight: 700, fontSize: 13
+            }}>
+              {activePatient?.name ? activePatient.name.split(' ').map(n=>n[0]).join('').substring(0,2).toUpperCase() : 'N'}
+            </div>
+            <div>
+              <div className="ribbon-name">{activePatient ? activePatient.name : 'Select or Create Patient'}</div>
+              <div className="ribbon-meta">
+                {activePatient ? (
+                  <>
+                    {activePatient.age ? `${activePatient.age} yo` : '--'} • {activePatient.sex || '--'} • {activePatient.phone || 'No phone'}
+                  </>
+                ) : (
+                  'Use the right workspace to select a patient, then hold the mic to record.'
+                )}
+              </div>
+            </div>
+          </div>
+          <div className="ribbon-alerts">
+            {(activePatient?.name?.toLowerCase().includes('amaka') || result?.state?.patient?.name?.toLowerCase().includes('amaka')) && (
+              <>
+                <span className="allergy-badge">ALLERGIES: PENICILLIN</span>
+                <span className="allergy-badge" style={{ background: 'rgba(217, 119, 6, 0.08)', borderColor: 'var(--warning)', color: 'var(--warning)' }}>PREGNANT (12 WKS)</span>
+              </>
+            )}
+          </div>
+        </div>
+
+        <div className="desktop-layout">
+          {/* LEFT COLUMN: dictation and supervisor console */}
+          <div className="desktop-sidebar" style={{ display: 'flex', flexDirection: 'column' }}>
+            <div style={{ padding: '16px 18px 8px', fontWeight: 700, fontSize: 11, color: 'var(--text-muted)', letterSpacing: '0.08em', textTransform: 'uppercase' }}>
+              Consultation Console
+            </div>
+
+            {(phase === 'idle' || phase === 'recording') && (
+              <VoiceScreen
+                phase={phase}
+                transcript={fullTx}
+                interimTx={interimTx}
+                error={srError}
+                isSpeaking={isSpeaking}
+                onStart={startRecording}
+                onStop={stopRecording}
+                onDemo={runDemo}
+                onTextSubmit={runConsultation}
+                stream={recRef.current?.stream}
+              />
+            )}
+
+            {phase === 'processing' && (
+              <AgentsScreen statuses={agentStatus} elapsed={elapsed} doneCount={doneCount} total={AGENTS.length} />
+            )}
+
+            {phase === 'complete' && (
+              <DoctorAvatar
+                audioB64={audioB64}
+                summary={result?.supervisor_summary || ''}
+                isSpeaking={isSpeaking}
+                onDone={() => setIsSpeaking(false)}
+                onSummary={() => {}}
+                onSend={() => setPhase('chat')}
+              />
+            )}
+
+            {phase === 'chat' && (
+              <ChatScreen
+                patient={activePatient}
+                result={result}
+                onDone={() => { reset(); setPage('home') }}
+                onBack={() => setPhase('complete')}
+              />
+            )}
+
+            {/* Persistent Sidebar Navigation */}
+            <div style={{ marginTop: 'auto' }}>
+              <nav className="bottom-nav">
+                {[
+                  { key: 'home',     label: 'Workspace', Icon: IconHome },
+                  { key: 'patients', label: 'Patients',  Icon: IconPatients },
+                  { key: 'notes',    label: 'All Notes', Icon: IconNotes },
+                  { key: 'settings', label: 'Settings',  Icon: IconSettings },
+                ].map(({ key, label, Icon }) => (
+                  <button key={key} className={`nav-item ${page === key ? 'active' : ''}`} onClick={() => { if (key === 'home' && phase !== 'complete') reset(); setPage(key); }}>
+                    <Icon />
+                    <span className="nav-item-label">{label}</span>
+                    {page === key && <div className="nav-active-line" />}
+                  </button>
+                ))}
+              </nav>
+            </div>
+          </div>
+
+          {/* RIGHT COLUMN: EHR record viewer or CitL editor */}
+          <div className="desktop-main">
+            {phase === 'complete' ? (
+              <CitLReview 
+                result={result}
+                activePatient={activePatient}
+                onCommit={(updatedState) => {
+                  fetchPatients()
+                  if (activePatient) {
+                    setActivePatient({ ...activePatient })
+                  }
+                  reset()
+                  setPage('home')
+                }}
+                onCancel={() => {
+                  reset()
+                  setPage('home')
+                }}
+              />
+            ) : (
+              <>
+                {page === 'home' && (
+                  <PatientPanel
+                    patients={patients}
+                    activePatient={activePatient}
+                    setActivePatient={setActivePatient}
+                    onBack={() => {}}
+                    refreshPatients={fetchPatients}
+                  />
+                )}
+                {page === 'patients' && (
+                  <PatientPanel
+                    patients={patients}
+                    activePatient={activePatient}
+                    setActivePatient={setActivePatient}
+                    onBack={() => setPage('home')}
+                    refreshPatients={fetchPatients}
+                  />
+                )}
+                {page === 'notes' && <NotesPage patients={patients} />}
+                {page === 'settings' && <SettingsPage />}
+              </>
+            )}
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // ── Mobile Screen Template ──
   return (
     <div className="mobile-shell">
       {/* ── Splash Screen ── */}
@@ -300,8 +535,8 @@ export default function App() {
       <header className="app-header">
         <div className="header-left" onClick={() => { reset(); setPage('home'); }} style={{cursor:'pointer'}}>
           <svg viewBox="0 0 32 32" fill="none" style={{width:30,height:30,filter:'drop-shadow(0 0 8px rgba(167,139,250,0.6))',flexShrink:0}}>
-            <rect x="2" y="2" width="28" height="28" rx="10" fill="rgba(167,139,250,0.12)" stroke="#A78BFA" strokeWidth="2" />
-            <path d="M7 16 H12 L14 10 L18 22 L20 16 H25" stroke="#A78BFA" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+            <rect x="2" y="2" width="28" height="28" rx="10" fill="rgba(167,139,250,0.12)" stroke="var(--accent)" strokeWidth="2" />
+            <path d="M7 16 H12 L14 10 L18 22 L20 16 H25" stroke="var(--accent)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
             <circle cx="16" cy="16" r="2" fill="#fff" />
           </svg>
           <span className="header-logo-text">KLINIK</span>
@@ -317,23 +552,50 @@ export default function App() {
             </div>
           </div>
         )}
-        <div className="header-gear" onClick={() => setPage('settings')} style={{cursor:'pointer'}}><IconGear /></div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <button 
+            className="theme-switch-btn"
+            onClick={() => setTheme(prev => prev === 'light' ? 'dark' : 'light')}
+            title="Toggle theme"
+          >
+            {theme === 'light' ? (
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{width:18,height:18}}>
+                <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+              </svg>
+            ) : (
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{width:18,height:18}}>
+                <circle cx="12" cy="12" r="5" />
+                <line x1="12" y1="1" x2="12" y2="3" />
+                <line x1="12" y1="21" x2="12" y2="23" />
+                <line x1="4.22" y1="4.22" x2="5.64" y2="5.64" />
+                <line x1="18.36" y1="18.36" x2="19.78" y2="19.78" />
+                <line x1="1" y1="12" x2="3" y2="12" />
+                <line x1="21" y1="12" x2="23" y2="12" />
+                <line x1="4.22" y1="19.78" x2="5.64" y2="18.36" />
+                <line x1="18.36" y1="5.64" x2="19.78" y2="4.22" />
+              </svg>
+            )}
+          </button>
+          <div className="header-gear" onClick={() => setPage('settings')} style={{cursor:'pointer'}}><IconGear /></div>
+        </div>
       </header>
 
       <div className="main-content">
         {page === 'home' && (
           <>
-            <div className="patient-context-strip" onClick={() => setPage('patients')}>
-              <div>
-                <div className="context-label">Current Patient</div>
-                <div className="context-name">
-                  {activePatient 
-                    ? `${activePatient.name}, ${activePatient.age || '--'}${activePatient.sex || ''}` 
-                    : 'Select a Patient'}
+            {phase !== 'review' && (
+              <div className="patient-context-strip" onClick={() => setPage('patients')}>
+                <div>
+                  <div className="context-label">Current Patient</div>
+                  <div className="context-name">
+                    {activePatient 
+                      ? `${activePatient.name}, ${activePatient.age || '--'}${activePatient.sex || ''}` 
+                      : 'Select a Patient'}
+                  </div>
                 </div>
+                <div className="context-arrow"><IconRight /></div>
               </div>
-              <div className="context-arrow"><IconRight /></div>
-            </div>
+            )}
 
             {(phase === 'idle' || phase === 'recording') && (
               <VoiceScreen
@@ -352,18 +614,31 @@ export default function App() {
             {phase === 'processing' && (
               <AgentsScreen statuses={agentStatus} elapsed={elapsed} doneCount={doneCount} total={AGENTS.length} />
             )}
-            {/* DoctorAvatar: mounts only on complete, plays audio instantly */}
             {phase === 'complete' && (
               <DoctorAvatar
                 audioB64={audioB64}
                 summary={result?.supervisor_summary || ''}
                 isSpeaking={isSpeaking}
                 onDone={() => setIsSpeaking(false)}
-                onSummary={() => setPage('patients')}
+                onSummary={() => setPhase('review')}
                 onSend={() => setPhase('chat')}
               />
             )}
-
+            {phase === 'review' && (
+              <CitLReview 
+                result={result}
+                activePatient={activePatient}
+                onCommit={(updatedState) => {
+                  fetchPatients()
+                  reset()
+                  setPage('home')
+                }}
+                onCancel={() => {
+                  reset()
+                  setPage('home')
+                }}
+              />
+            )}
             {phase === 'chat' && (
               <ChatScreen
                 patient={activePatient}
