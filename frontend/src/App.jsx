@@ -398,52 +398,54 @@ export default function App() {
 
         <div className="desktop-layout">
           {/* LEFT COLUMN: dictation and supervisor console */}
-          <div className="desktop-sidebar" style={{ display: 'flex', flexDirection: 'column' }}>
-            <div style={{ padding: '16px 18px 8px', fontWeight: 700, fontSize: 11, color: 'var(--text-muted)', letterSpacing: '0.08em', textTransform: 'uppercase' }}>
-              Consultation Console
+          <div className="desktop-sidebar" style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
+            <div style={{ flex: 1, overflowY: 'auto', minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+              <div style={{ padding: '16px 18px 8px', fontWeight: 700, fontSize: 11, color: 'var(--text-muted)', letterSpacing: '0.08em', textTransform: 'uppercase' }}>
+                Consultation Console
+              </div>
+
+              {(phase === 'idle' || phase === 'recording') && (
+                <VoiceScreen
+                  phase={phase}
+                  transcript={fullTx}
+                  interimTx={interimTx}
+                  error={srError}
+                  isSpeaking={isSpeaking}
+                  onStart={startRecording}
+                  onStop={stopRecording}
+                  onDemo={runDemo}
+                  onTextSubmit={runConsultation}
+                  stream={recRef.current?.stream}
+                />
+              )}
+
+              {phase === 'processing' && (
+                <AgentsScreen statuses={agentStatus} elapsed={elapsed} doneCount={doneCount} total={AGENTS.length} />
+              )}
+
+              {phase === 'complete' && (
+                <DoctorAvatar
+                  audioB64={audioB64}
+                  summary={result?.supervisor_summary || ''}
+                  isSpeaking={isSpeaking}
+                  onDone={() => setIsSpeaking(false)}
+                  onSummary={() => {}}
+                  onSend={() => setPhase('chat')}
+                />
+              )}
+
+              {phase === 'chat' && (
+                <ChatScreen
+                  patient={activePatient}
+                  result={result}
+                  onDone={() => { reset(); setPage('home') }}
+                  onBack={() => setPhase('complete')}
+                />
+              )}
             </div>
 
-            {(phase === 'idle' || phase === 'recording') && (
-              <VoiceScreen
-                phase={phase}
-                transcript={fullTx}
-                interimTx={interimTx}
-                error={srError}
-                isSpeaking={isSpeaking}
-                onStart={startRecording}
-                onStop={stopRecording}
-                onDemo={runDemo}
-                onTextSubmit={runConsultation}
-                stream={recRef.current?.stream}
-              />
-            )}
-
-            {phase === 'processing' && (
-              <AgentsScreen statuses={agentStatus} elapsed={elapsed} doneCount={doneCount} total={AGENTS.length} />
-            )}
-
-            {phase === 'complete' && (
-              <DoctorAvatar
-                audioB64={audioB64}
-                summary={result?.supervisor_summary || ''}
-                isSpeaking={isSpeaking}
-                onDone={() => setIsSpeaking(false)}
-                onSummary={() => {}}
-                onSend={() => setPhase('chat')}
-              />
-            )}
-
-            {phase === 'chat' && (
-              <ChatScreen
-                patient={activePatient}
-                result={result}
-                onDone={() => { reset(); setPage('home') }}
-                onBack={() => setPhase('complete')}
-              />
-            )}
-
             {/* Persistent Sidebar Navigation */}
-            <div style={{ marginTop: 'auto' }}>
+            <div style={{ flexShrink: 0 }}>
               <nav className="bottom-nav">
                 {[
                   { key: 'home',     label: 'Workspace', Icon: IconHome },

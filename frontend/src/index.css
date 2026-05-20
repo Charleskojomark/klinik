@@ -820,11 +820,11 @@ body {
 /* ── Supervisor / Completion Screen ── */
 .completion-overlay {
   position: relative;
-  padding: 24px 20px;
+  padding: 16px 14px 100px;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 16px;
+  gap: 12px;
   width: 100%;
 }
 
@@ -841,13 +841,13 @@ body {
 
 .sv-avatar-wrap { display: flex; flex-direction: column; align-items: center; gap: 12px; }
 .sv-avatar-ring {
-  width: 160px; height: 160px;
+  width: 120px; height: 120px;
   border-radius: 50%;
   border: 3px solid var(--accent);
   display: flex; align-items: center; justify-content: center;
   background: var(--accent-glow);
   box-shadow: 0 0 32px var(--accent-glow);
-  font-size: 26px; font-weight: 700;
+  font-size: 20px; font-weight: 700;
   color: var(--accent);
   letter-spacing: 0.05em;
   transition: box-shadow 0.3s;
@@ -893,8 +893,8 @@ body {
   flex: 1;
   background: var(--bg-surface);
   border: 1px solid var(--border-md);
-  border-radius: var(--r-md);
-  padding: 10px 16px;
+  border-radius: var(--r-sm);
+  padding: 7px 12px;
   display: inline-flex;
   flex-direction: row;
   align-items: center;
@@ -902,7 +902,7 @@ body {
   gap: 6px;
   cursor: pointer;
   font-family: var(--font);
-  font-size: 13px; font-weight: 600;
+  font-size: 12px; font-weight: 600;
   color: var(--text-secondary);
   transition: all 0.2s;
   box-shadow: var(--shadow-card);
@@ -917,7 +917,7 @@ body {
     inset -1px -1px 3px var(--border),
     inset  1px  1px 3px rgba(0,0,0,0.1);
 }
-.comp-btn svg { width: 20px; height: 20px; }
+.comp-btn svg { width: 16px; height: 16px; }
 .comp-btn-primary {
   background: linear-gradient(145deg, var(--accent), var(--accent-dim));
   color: #fff;
