@@ -329,9 +329,9 @@ export default function App() {
               <div className="center-orb-wrapper">
                 <AudioVisualizer stream={recRef.current?.stream} isActive={phase === 'recording'} />
               </div>
-              <div className="header-patient-sub">
-                {phase === 'recording' ? '● Recording' : phase === 'processing' ? `${doneCount}/${AGENTS.length} agents` : 'Complete'}
-              </div>
+              {phase === 'recording' && (
+                <div className="header-patient-sub">● Recording</div>
+              )}
             </div>
           )}
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -549,9 +549,9 @@ export default function App() {
             <div className="center-orb-wrapper">
               <AudioVisualizer stream={recRef.current?.stream} isActive={phase === 'recording'} />
             </div>
-            <div className="header-patient-sub">
-              {phase === 'recording' ? '● Recording' : phase === 'processing' ? `${doneCount}/${AGENTS.length} agents` : 'Complete'}
-            </div>
+            {phase === 'recording' && (
+              <div className="header-patient-sub">● Recording</div>
+            )}
           </div>
         )}
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
