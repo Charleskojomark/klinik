@@ -77,19 +77,20 @@ export default function LoginScreen({ onLogin }) {
     <div style={{
       position: 'fixed', inset: 0, zIndex: 9998,
       background: 'var(--bg-base)',
-      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      display: 'flex', alignItems: 'flex-start', justifyContent: 'center',
+      overflowY: 'auto',
       padding: '20px',
       animation: 'splash-in 0.4s ease-out both',
     }}>
       {/* Ambient glow */}
       <div style={{
-        position: 'absolute', top: '-20%', left: '50%', transform: 'translateX(-50%)',
+        position: 'fixed', top: '-20%', left: '50%', transform: 'translateX(-50%)',
         width: 600, height: 600, borderRadius: '50%',
         background: 'radial-gradient(circle, var(--accent-glow) 0%, transparent 70%)',
-        pointerEvents: 'none',
+        pointerEvents: 'none', zIndex: 0,
       }}/>
 
-      <div style={{ width: '100%', maxWidth: 440, position: 'relative', zIndex: 1 }}>
+      <div style={{ width: '100%', maxWidth: 440, position: 'relative', zIndex: 1, margin: 'auto' }}>
 
         {/* Logo */}
         <div style={{ textAlign: 'center', marginBottom: 32 }}>
