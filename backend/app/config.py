@@ -32,8 +32,8 @@ class Settings(BaseSettings):
     turso_auth_token: str = ""
 
     # ── LLM (Hugging Face Serverless / OpenAI-compatible) ──
-    vllm_base_url: str = "https://api-inference.huggingface.co/models/meta-llama/Meta-Llama-3-8B-Instruct/v1"
-    llm_model: str = "meta-llama/Meta-Llama-3-8B-Instruct"
+    vllm_base_url: str = "https://router.huggingface.co/v1"
+    llm_model: str = "Qwen/Qwen2.5-72B-Instruct"
     hf_token: str = ""
 
     # ── Redis ──
