@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 
-export default function CitLReview({ result, activePatient, onCommit, onCancel }) {
+export default function CitLReview({ result, activePatient, currentUser, authFetch, onCommit, onCancel }) {
+  const isNurse = currentUser?.role === 'nurse'
   const [sessionState, setSessionState] = useState(null)
   const [submitting, setSubmitting] = useState(false)
   const [overrideAllergy, setOverrideAllergy] = useState(false)
@@ -166,6 +167,7 @@ export default function CitLReview({ result, activePatient, onCommit, onCancel }
   }
 
   const handleCommit = async () => {
+    if (isNurse) return
     if (allergyWarningNeeded && !overrideAllergy) {
       alert('Please review and check the allergy override checkbox before committing.')
       return
@@ -173,7 +175,8 @@ export default function CitLReview({ result, activePatient, onCommit, onCancel }
 
     setSubmitting(true)
     try {
-      const response = await fetch(`/api/sessions/${sessionState.session_id}`, {
+      const fetchFn = authFetch || fetch
+      const response = await fetchFn(`/api/sessions/${sessionState.session_id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(sessionState)
@@ -543,10 +546,29 @@ export default function CitLReview({ result, activePatient, onCommit, onCancel }
       </div>
 
       <div className="citl-actions">
+        {isNurse && (
+          <div style={{
+            width: '100%', padding: '10px 14px', marginBottom: 8,
+            background: 'rgba(139,92,246,0.08)', border: '1px solid rgba(139,92,246,0.25)',
+            borderRadius: 10, display: 'flex', alignItems: 'center', gap: 8,
+            fontSize: 12, color: '#8B5CF6', fontWeight: 600,
+          }}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14">
+              <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+            </svg>
+            Read-only — Clinician sign-off required. Contact a doctor to commit this record to the EHR.
+          </div>
+        )}
         <button className="comp-btn" onClick={onCancel} disabled={submitting}>
           Cancel
         </button>
-        <button className="commit-btn" onClick={handleCommit} disabled={submitting}>
+        <button
+          className="commit-btn"
+          onClick={handleCommit}
+          disabled={submitting || isNurse}
+          title={isNurse ? 'Only doctors can commit to EHR' : 'Commit to EHR'}
+          style={isNurse ? { opacity: 0.45, cursor: 'not-allowed' } : {}}
+        >
           {submitting ? (
             <>
               <span className="spinner" style={{ width: 14, height: 14, borderTopColor: '#fff' }} />
@@ -557,7 +579,7 @@ export default function CitLReview({ result, activePatient, onCommit, onCancel }
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" width="16" height="16">
                 <polyline points="20 6 9 17 4 12"/>
               </svg>
-              Commit to EHR
+              {isNurse ? 'Commit to EHR (Restricted)' : 'Commit to EHR'}
             </>
           )}
         </button>

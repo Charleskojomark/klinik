@@ -17,7 +17,7 @@ import asyncio
 import time
 from collections import OrderedDict
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, HTTPException, BackgroundTasks, Request
+from fastapi import FastAPI, HTTPException, BackgroundTasks, Request, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
@@ -29,6 +29,7 @@ from app.models.fhir_models import clinical_state_to_fhir_bundle
 from app.models.database import init_db, save_clinical_state, get_all_patients, get_patient, get_all_encounters, get_encounter
 from app.graph.clinical_workflow import run_clinical_workflow
 from app.services.event_bus import get_event_bus
+from app.services.auth import get_current_user, RoleChecker
 from prometheus_fastapi_instrumentator import Instrumentator
 
 # Configure logging
@@ -175,8 +176,102 @@ async def health():
     return {"status": "healthy"}
 
 
+@app.post("/api/auth/login")
+async def login(request: Request):
+    """
+    Unified JSON & Form Login.
+    Supports application/json for the React frontend and Form data for Swagger UI.
+    """
+    from app.models.database import get_user_by_username
+    from app.services.auth import verify_password, create_access_token
+
+    username = None
+    password = None
+
+    # Determine content type and extract credentials
+    content_type = request.headers.get("content-type", "")
+    if "application/json" in content_type:
+        try:
+            body = await request.json()
+            username = body.get("username")
+            password = body.get("password")
+        except Exception:
+            pass
+    else:
+        try:
+            form = await request.form()
+            username = form.get("username")
+            password = form.get("password")
+        except Exception:
+            pass
+
+    if not username or not password:
+        raise HTTPException(status_code=400, detail="Username and password are required")
+
+    user = await get_user_by_username(username)
+    if not user or not verify_password(user["password_hash"], password):
+        raise HTTPException(status_code=401, detail="Invalid username or password")
+
+    token = create_access_token({"sub": user["username"], "role": user["role"], "name": user["name"]})
+    return {
+        "access_token": token,
+        "token_type": "bearer",
+        "user": {
+            "id": user["id"],
+            "username": user["username"],
+            "role": user["role"],
+            "name": user["name"]
+        }
+    }
+
+
+@app.get("/api/auth/me")
+async def get_me(current_user: dict = Depends(get_current_user)):
+    """Retrieve the current logged-in user details."""
+    return {
+        "id": current_user["id"],
+        "username": current_user["username"],
+        "role": current_user["role"],
+        "name": current_user["name"]
+    }
+
+
+@app.get("/api/admin/audit-logs")
+async def get_audit_logs(current_user: dict = Depends(RoleChecker(["admin"]))):
+    """Retrieve the system audit logs (admin only)."""
+    from app.models.database import _get_conn
+    conn = await _get_conn()
+    try:
+        cursor = conn.execute("""
+            SELECT id, timestamp, ip_address, endpoint, method, status_code, duration_ms
+            FROM audit_logs
+            ORDER BY timestamp DESC
+            LIMIT 100
+        """)
+        logs = [
+            {
+                "id": r[0],
+                "timestamp": r[1],
+                "ip_address": r[2],
+                "endpoint": r[3],
+                "method": r[4],
+                "status_code": r[5],
+                "duration_ms": r[6]
+            }
+            for r in cursor.fetchall()
+        ]
+        return {"logs": logs}
+    except Exception as e:
+        logger.error(f"Failed to fetch audit logs: {e}")
+        raise HTTPException(status_code=500, detail="Database error fetching logs")
+
+
+
 @app.post("/api/consultation", response_model=ConsultationResponse)
-async def start_consultation(req: ConsultationRequest):
+async def start_consultation(
+    req: ConsultationRequest,
+    current_user: dict = Depends(RoleChecker(["doctor", "nurse"]))
+):
     """
     Executes the multi-agent clinical workflow, then generates TTS audio.
     Audio is returned directly in the response (no SSE roundtrip needed).
@@ -184,11 +279,11 @@ async def start_consultation(req: ConsultationRequest):
     from app.services.deepgram_tts import generate_tts_audio_b64
 
     session_id = req.session_id if req.session_id else f"session-{uuid.uuid4().hex[:8]}"
-    logger.info(f"📋 New consultation: {session_id}")
+    logger.info(f"📋 New consultation: {session_id} by {current_user['name']}")
 
     clinical_state = ClinicalState(
         session_id=session_id,
-        doctor_id=req.doctor_id,
+        doctor_id=current_user["id"],
         transcript=req.transcript,
     )
 
@@ -239,7 +334,7 @@ async def start_consultation(req: ConsultationRequest):
 
 
 @app.post("/api/demo", response_model=ConsultationResponse)
-async def run_demo():
+async def run_demo(current_user: dict = Depends(RoleChecker(["doctor", "nurse", "admin"]))):
     """The Winning Demo — Amaka pre-eclampsia scenario."""
     demo_transcript = (
         "Amaka Obi, 28, 12 weeks pregnant, BP 145/95, headache, blurred vision. "
@@ -248,10 +343,10 @@ async def run_demo():
     )
     req = ConsultationRequest(
         transcript=demo_transcript,
-        doctor_id="dr-eze",
+        doctor_id=current_user["id"],
         patient_phone="+2348012345678",
     )
-    return await start_consultation(req)
+    return await start_consultation(req, current_user=current_user)
 
 
 # ──────────────────────────────────────────────
@@ -259,7 +354,7 @@ async def run_demo():
 # ──────────────────────────────────────────────
 
 @app.get("/api/sessions")
-async def list_sessions():
+async def list_sessions(current_user: dict = Depends(get_current_user)):
     """List all consultation sessions (in-memory, capped at 500)."""
     return {
         "count": len(sessions),
@@ -276,7 +371,7 @@ async def list_sessions():
 
 
 @app.get("/api/sessions/{session_id}")
-async def get_session(session_id: str):
+async def get_session(session_id: str, current_user: dict = Depends(get_current_user)):
     """Get full state of a consultation session."""
     if session_id not in sessions:
         raise HTTPException(status_code=404, detail="Session not found")
@@ -284,7 +379,11 @@ async def get_session(session_id: str):
 
 
 @app.put("/api/sessions/{session_id}", response_model=ClinicalState)
-async def update_session(session_id: str, updated_state: ClinicalState):
+async def update_session(
+    session_id: str,
+    updated_state: ClinicalState,
+    current_user: dict = Depends(RoleChecker(["doctor"]))
+):
     """
     Update the persisted clinical state after the doctor reviews and edits it.
     """
@@ -304,7 +403,7 @@ async def update_session(session_id: str, updated_state: ClinicalState):
 
 
 @app.get("/api/sessions/{session_id}/agents")
-async def get_agent_status(session_id: str):
+async def get_agent_status(session_id: str, current_user: dict = Depends(get_current_user)):
     """Get agent statuses for the live dashboard."""
     if session_id not in sessions:
         raise HTTPException(status_code=404, detail="Session not found")
@@ -331,12 +430,17 @@ async def get_agent_status(session_id: str):
 # ──────────────────────────────────────────────
 
 @app.get("/api/sessions/{session_id}/events")
-async def stream_session_events(session_id: str):
+async def stream_session_events(
+    session_id: str,
+    token: Optional[str] = None
+):
     """
     Server-Sent Events endpoint for real-time agent status updates.
-    The React dashboard subscribes to this for live visualization.
-    Also delivers 'audio ready' events with TTS/Simli payloads.
+    We authenticate via token query parameter.
     """
+    # Authenticate token query param fallback
+    await get_current_user(token_param=token)
+
     event_bus = await get_event_bus()
 
     async def event_generator():
@@ -359,7 +463,7 @@ async def stream_session_events(session_id: str):
 # ──────────────────────────────────────────────
 
 @app.get("/api/sessions/{session_id}/fhir")
-async def export_fhir_bundle(session_id: str):
+async def export_fhir_bundle(session_id: str, current_user: dict = Depends(get_current_user)):
     """
     Export a consultation as a FHIR R4 Bundle.
     Enables interoperability with any FHIR-compliant EHR system.
@@ -377,7 +481,11 @@ async def export_fhir_bundle(session_id: str):
 # ──────────────────────────────────────────────
 
 @app.get("/api/livekit/token")
-async def get_livekit_token(room_name: str = "klinik-consultation", participant_name: str = "doctor"):
+async def get_livekit_token(
+    room_name: str = "klinik-consultation",
+    participant_name: str = "doctor",
+    current_user: dict = Depends(get_current_user)
+):
     """
     Generate a LiveKit Access Token for the React frontend to join the room.
     """
@@ -399,14 +507,14 @@ async def get_livekit_token(room_name: str = "klinik-consultation", participant_
 # ──────────────────────────────────────────────
 
 @app.get("/api/patients")
-async def list_patients():
+async def list_patients(current_user: dict = Depends(get_current_user)):
     """List all patients from the database."""
     patients = await get_all_patients()
     return {"count": len(patients), "patients": patients}
 
 
 @app.get("/api/patients/{patient_id}")
-async def get_patient_detail(patient_id: str):
+async def get_patient_detail(patient_id: str, current_user: dict = Depends(get_current_user)):
     """Get a patient with their encounter history."""
     patient = await get_patient(patient_id)
     if not patient:
@@ -415,14 +523,14 @@ async def get_patient_detail(patient_id: str):
 
 
 @app.get("/api/encounters")
-async def list_encounters():
+async def list_encounters(current_user: dict = Depends(get_current_user)):
     """List all encounters from the database."""
     encounters = await get_all_encounters()
     return {"count": len(encounters), "encounters": encounters}
 
 
 @app.get("/api/encounters/{encounter_id}")
-async def get_encounter_detail(encounter_id: str):
+async def get_encounter_detail(encounter_id: str, current_user: dict = Depends(get_current_user)):
     """Get a single encounter."""
     enc = await get_encounter(encounter_id)
     if not enc:

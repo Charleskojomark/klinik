@@ -34,3 +34,10 @@ Thumbs.db
 
 # Model cache
 /models/
+
+# Temp DB files
+data/*.db-shm
+data/*.db-wal
+
+# Build/temp tools
+.bob/

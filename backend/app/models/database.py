@@ -121,7 +121,37 @@ async def init_db():
                 duration_ms REAL
             )
         """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS users (
+                id TEXT PRIMARY KEY,
+                username TEXT UNIQUE,
+                password_hash TEXT,
+                role TEXT,
+                name TEXT,
+                created_at TEXT
+            )
+        """)
         conn.commit()
+
+        # Seed demo users if empty
+        cursor = conn.execute("SELECT COUNT(*) FROM users")
+        if cursor.fetchone()[0] == 0:
+            from app.services.auth import hash_password
+            conn.execute(
+                "INSERT INTO users (id, username, password_hash, role, name, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+                ("admin-default", "admin", hash_password("adminpassword123"), "admin", "System Administrator", datetime.utcnow().isoformat())
+            )
+            conn.execute(
+                "INSERT INTO users (id, username, password_hash, role, name, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+                ("dr-eze", "doctor", hash_password("doctorpassword123"), "doctor", "Dr. Amadi Eze", datetime.utcnow().isoformat())
+            )
+            conn.execute(
+                "INSERT INTO users (id, username, password_hash, role, name, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+                ("nurse-jane", "nurse", hash_password("nursepassword123"), "nurse", "Nurse Jane Obi", datetime.utcnow().isoformat())
+            )
+            conn.commit()
+            logger.info("🗄️  Database seeded with default demo users")
+
 
         # Safe migrations — add columns that may be missing from older schema versions
         _safe_add_column(conn, "patients",   "tenant_id",          "TEXT")
@@ -383,3 +413,44 @@ async def get_encounter(encounter_id: str) -> Optional[dict]:
     except Exception as e:
         logger.error(f"get_encounter error: {e}")
         return None
+
+
+async def get_user_by_username(username: str) -> Optional[dict]:
+    conn = await _get_conn()
+    try:
+        cursor = conn.execute("SELECT id, username, password_hash, role, name, created_at FROM users WHERE username = ?", (username,))
+        row = cursor.fetchone()
+        if not row:
+            return None
+        return {
+            "id": row[0],
+            "username": row[1],
+            "password_hash": row[2],
+            "role": row[3],
+            "name": row[4],
+            "created_at": row[5]
+        }
+    except Exception as e:
+        logger.error(f"get_user_by_username error: {e}")
+        return None
+
+
+async def get_user_by_id(user_id: str) -> Optional[dict]:
+    conn = await _get_conn()
+    try:
+        cursor = conn.execute("SELECT id, username, password_hash, role, name, created_at FROM users WHERE id = ?", (user_id,))
+        row = cursor.fetchone()
+        if not row:
+            return None
+        return {
+            "id": row[0],
+            "username": row[1],
+            "password_hash": row[2],
+            "role": row[3],
+            "name": row[4],
+            "created_at": row[5]
+        }
+    except Exception as e:
+        logger.error(f"get_user_by_id error: {e}")
+        return None
+

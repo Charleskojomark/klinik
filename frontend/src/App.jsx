@@ -3,8 +3,24 @@ import PatientPanel from './components/PatientPanel.jsx'
 import DoctorAvatar from './components/DoctorAvatar.jsx'
 import AudioVisualizer from './components/AudioVisualizer.jsx'
 import CitLReview from './components/CitLReview.jsx'
+import LoginScreen from './components/LoginScreen.jsx'
+import AuditLogsPage from './components/AuditLogsPage.jsx'
 
 const API = '/api'
+
+// ── Auth helpers ──
+function getStoredUser() {
+  try { return JSON.parse(localStorage.getItem('klinik_user')) } catch { return null }
+}
+function getStoredToken() {
+  return localStorage.getItem('klinik_token') || null
+}
+function makeAuthFetch(token) {
+  return (url, opts = {}) => fetch(url, {
+    ...opts,
+    headers: { ...(opts.headers || {}), Authorization: `Bearer ${token}` },
+  })
+}
 
 const AGENTS = [
   { key: 'transcription',  name: 'Transcription',  icon: '🎙️', done: 'Transcript processed',   working: 'Processing audio…' },
@@ -53,6 +69,37 @@ function speak(text, onEnd) {
 }
 
 export default function App() {
+  const [currentUser, setCurrentUser] = useState(() => getStoredUser())
+  const [authToken,   setAuthToken]   = useState(() => getStoredToken())
+
+  const handleLogin = (user, token) => {
+    setCurrentUser(user)
+    setAuthToken(token)
+  }
+
+  const handleLogout = () => {
+    localStorage.removeItem('klinik_token')
+    localStorage.removeItem('klinik_user')
+    setCurrentUser(null)
+    setAuthToken(null)
+  }
+
+  if (!currentUser || !authToken) {
+    return <LoginScreen onLogin={handleLogin} />
+  }
+
+  return (
+    <AppMain
+      currentUser={currentUser}
+      authToken={authToken}
+      onLogout={handleLogout}
+    />
+  )
+}
+
+function AppMain({ currentUser, authToken, onLogout }) {
+  const authFetch = makeAuthFetch(authToken)
+
   const [showSplash,     setShowSplash]    = useState(true)
   const [splashOut,      setSplashOut]     = useState(false)
   const [page,           setPage]          = useState('home')
@@ -96,7 +143,7 @@ export default function App() {
   // Fetch patients on mount
   const fetchPatients = async () => {
     try {
-      const res = await fetch(`${API}/patients`)
+      const res = await authFetch(`${API}/patients`)
       if (res.ok) {
         const data = await res.json()
         setPatients(data.patients || [])
@@ -192,7 +239,7 @@ export default function App() {
   // SSE only drives agent status animations.
   const subscribeSSE = (sessionId) => {
     if (sseRef.current) sseRef.current.close()
-    const es = new EventSource(`${API}/sessions/${sessionId}/events`)
+    const es = new EventSource(`${API}/sessions/${sessionId}/events?token=${encodeURIComponent(authToken)}`)
     es.onmessage = (e) => {
       try {
         const ev = JSON.parse(e.data)
@@ -227,7 +274,7 @@ export default function App() {
     subscribeSSE(sessionId)
 
     try {
-      const res = await fetch(`${API}/consultation`, {
+      const res = await authFetch(`${API}/consultation`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -334,8 +381,38 @@ export default function App() {
               )}
             </div>
           )}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <button 
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            {/* User chip */}
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: 8,
+              padding: '5px 12px 5px 8px',
+              background: 'var(--bg-surface)', border: '1px solid var(--border)',
+              borderRadius: 99, cursor: 'default',
+            }}>
+              <div style={{
+                width: 26, height: 26, borderRadius: '50%', flexShrink: 0,
+                background: currentUser.role === 'doctor' ? 'var(--accent-light)'
+                          : currentUser.role === 'nurse'  ? 'rgba(139,92,246,0.12)'
+                          : 'rgba(245,158,11,0.12)',
+                border: `1.5px solid ${
+                  currentUser.role === 'doctor' ? 'var(--accent-border)'
+                  : currentUser.role === 'nurse' ? 'rgba(139,92,246,0.3)'
+                  : 'rgba(245,158,11,0.3)'}`,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: 13,
+              }}>
+                {currentUser.role === 'doctor' ? '🩺' : currentUser.role === 'nurse' ? '💊' : '🛡️'}
+              </div>
+              <div>
+                <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-primary)', lineHeight: 1.1 }}>
+                  {currentUser.name.split(' ').slice(0,2).join(' ')}
+                </div>
+                <div style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'capitalize' }}>
+                  {currentUser.role}
+                </div>
+              </div>
+            </div>
+            <button
               className="theme-switch-btn"
               onClick={() => setTheme(prev => prev === 'light' ? 'dark' : 'light')}
               title="Toggle theme"
@@ -358,7 +435,25 @@ export default function App() {
                 </svg>
               )}
             </button>
-            <div className="header-gear" onClick={() => setPage('settings')} style={{cursor:'pointer'}}><IconGear /></div>
+            <button
+              id="logout-btn"
+              title="Sign out"
+              onClick={onLogout}
+              style={{
+                width: 36, height: 36, borderRadius: '50%',
+                background: 'var(--bg-surface)', border: '1px solid var(--border)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                cursor: 'pointer', color: 'var(--error)', transition: 'all 0.2s',
+              }}
+              onMouseEnter={e => e.currentTarget.style.background = 'rgba(220,38,38,0.08)'}
+              onMouseLeave={e => e.currentTarget.style.background = 'var(--bg-surface)'}
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="16" height="16">
+                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+                <polyline points="16 17 21 12 16 7"/>
+                <line x1="21" y1="12" x2="9" y2="12"/>
+              </svg>
+            </button>
           </div>
         </header>
 
@@ -452,6 +547,7 @@ export default function App() {
                   { key: 'patients', label: 'Patients',  Icon: IconPatients },
                   { key: 'notes',    label: 'All Notes', Icon: IconNotes },
                   { key: 'settings', label: 'Settings',  Icon: IconSettings },
+                  ...(currentUser.role === 'admin' ? [{ key: 'audit', label: 'Audit', Icon: () => <span style={{fontSize:16}}>🛡️</span> }] : []),
                 ].map(({ key, label, Icon }) => (
                   <button key={key} className={`nav-item ${page === key ? 'active' : ''}`} onClick={() => { if (key === 'home' && phase !== 'complete') reset(); setPage(key); }}>
                     <Icon />
@@ -469,6 +565,8 @@ export default function App() {
               <CitLReview 
                 result={result}
                 activePatient={activePatient}
+                currentUser={currentUser}
+                authFetch={authFetch}
                 onCommit={(updatedState) => {
                   fetchPatients()
                   if (activePatient) {
@@ -502,8 +600,9 @@ export default function App() {
                     refreshPatients={fetchPatients}
                   />
                 )}
-                {page === 'notes' && <NotesPage patients={patients} />}
+                {page === 'notes' && <NotesPage patients={patients} authFetch={authFetch} />}
                 {page === 'settings' && <SettingsPage />}
+                {page === 'audit' && currentUser.role === 'admin' && <AuditLogsPage authFetch={authFetch} />}
               </>
             )}
           </div>
@@ -554,33 +653,48 @@ export default function App() {
             )}
           </div>
         )}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <button 
-            className="theme-switch-btn"
-            onClick={() => setTheme(prev => prev === 'light' ? 'dark' : 'light')}
-            title="Toggle theme"
-          >
-            {theme === 'light' ? (
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{width:18,height:18}}>
-                <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <button
+              className="theme-switch-btn"
+              onClick={() => setTheme(prev => prev === 'light' ? 'dark' : 'light')}
+              title="Toggle theme"
+            >
+              {theme === 'light' ? (
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{width:18,height:18}}>
+                  <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+                </svg>
+              ) : (
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{width:18,height:18}}>
+                  <circle cx="12" cy="12" r="5" />
+                  <line x1="12" y1="1" x2="12" y2="3" />
+                  <line x1="12" y1="21" x2="12" y2="23" />
+                  <line x1="4.22" y1="4.22" x2="5.64" y2="5.64" />
+                  <line x1="18.36" y1="18.36" x2="19.78" y2="19.78" />
+                  <line x1="1" y1="12" x2="3" y2="12" />
+                  <line x1="21" y1="12" x2="23" y2="12" />
+                  <line x1="4.22" y1="19.78" x2="5.64" y2="18.36" />
+                  <line x1="18.36" y1="5.64" x2="19.78" y2="4.22" />
+                </svg>
+              )}
+            </button>
+            <button
+              title="Sign out"
+              onClick={onLogout}
+              style={{
+                width: 34, height: 34, borderRadius: '50%',
+                background: 'var(--bg-surface)', border: '1px solid var(--border)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                cursor: 'pointer', color: 'var(--error)',
+              }}
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="15" height="15">
+                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+                <polyline points="16 17 21 12 16 7"/>
+                <line x1="21" y1="12" x2="9" y2="12"/>
               </svg>
-            ) : (
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{width:18,height:18}}>
-                <circle cx="12" cy="12" r="5" />
-                <line x1="12" y1="1" x2="12" y2="3" />
-                <line x1="12" y1="21" x2="12" y2="23" />
-                <line x1="4.22" y1="4.22" x2="5.64" y2="5.64" />
-                <line x1="18.36" y1="18.36" x2="19.78" y2="19.78" />
-                <line x1="1" y1="12" x2="3" y2="12" />
-                <line x1="21" y1="12" x2="23" y2="12" />
-                <line x1="4.22" y1="19.78" x2="5.64" y2="18.36" />
-                <line x1="18.36" y1="5.64" x2="19.78" y2="4.22" />
-              </svg>
-            )}
-          </button>
-          <div className="header-gear" onClick={() => setPage('settings')} style={{cursor:'pointer'}}><IconGear /></div>
-        </div>
-      </header>
+            </button>
+          </div>
+        </header>
 
       <div className="main-content">
         {page === 'home' && (
@@ -630,6 +744,8 @@ export default function App() {
               <CitLReview 
                 result={result}
                 activePatient={activePatient}
+                currentUser={currentUser}
+                authFetch={authFetch}
                 onCommit={(updatedState) => {
                   fetchPatients()
                   reset()
@@ -662,8 +778,9 @@ export default function App() {
           />
         )}
 
-        {page === 'notes' && <NotesPage patients={patients} />}
+        {page === 'notes' && <NotesPage patients={patients} authFetch={authFetch} />}
         {page === 'settings' && <SettingsPage />}
+        {page === 'audit' && currentUser.role === 'admin' && <AuditLogsPage authFetch={authFetch} />}
       </div>
 
       <nav className="bottom-nav">
@@ -672,6 +789,7 @@ export default function App() {
           { key: 'patients', label: 'Patients', Icon: IconPatients },
           { key: 'notes',    label: 'Notes',    Icon: IconNotes },
           { key: 'settings', label: 'Settings', Icon: IconSettings },
+          ...(currentUser.role === 'admin' ? [{ key: 'audit', label: 'Audit', Icon: () => <span style={{fontSize:16}}>🛡️</span> }] : []),
         ].map(({ key, label, Icon }) => (
           <button key={key} className={`nav-item ${page === key ? 'active' : ''}`} onClick={() => { if (key === 'home') reset(); setPage(key); }}>
             <Icon />
@@ -840,12 +958,12 @@ function AgentsScreen({ statuses, elapsed, doneCount, total }) {
 }
 
 /* ── Notes Page ── */
-function NotesPage({ patients }) {
+function NotesPage({ patients, authFetch }) {
   const [encounters, setEncounters] = useState([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    fetch('/api/encounters')
+    authFetch('/api/encounters')
       .then(r => r.json())
       .then(d => { setEncounters(d.encounters || []); setLoading(false) })
       .catch(() => setLoading(false))
