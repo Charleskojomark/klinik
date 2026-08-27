@@ -141,12 +141,18 @@ function AppMain({ currentUser, authToken, onLogout }) {
   }, [])
 
   // Fetch patients on mount
-  const fetchPatients = async () => {
+  const fetchPatients = async (preserveActiveId) => {
     try {
       const res = await authFetch(`${API}/patients`)
       if (res.ok) {
         const data = await res.json()
-        setPatients(data.patients || [])
+        const list = data.patients || []
+        setPatients(list)
+        // Re-sync activePatient from the fresh list so the selection stays current
+        if (preserveActiveId) {
+          const refreshed = list.find(p => p.id === preserveActiveId)
+          if (refreshed) setActivePatient(refreshed)
+        }
       }
     } catch (e) {
       console.error("Failed to fetch patients", e)
@@ -286,7 +292,7 @@ function AppMain({ currentUser, authToken, onLogout }) {
       if (!res.ok) throw new Error('API error')
       const data = await res.json()
 
-      fetchPatients()
+      fetchPatients(activePatient?.id)
 
       // Audio is inline in the response — pass directly to DoctorAvatar
       setAudioB64(data.supervisor_audio_b64 || null)
