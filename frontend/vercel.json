@@ -2,7 +2,7 @@
   "rewrites": [
     {
       "source": "/api/:path*",
-      "destination": "https://klinik-backend-452919660880.us-central1.run.app/api/:path*"
+      "destination": "https://api.charlesmark.xyz/api/:path*"
     }
   ]
 }

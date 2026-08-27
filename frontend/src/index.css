@@ -227,9 +227,43 @@ body {
   text-shadow: 0 2px 8px var(--accent-glow);
 }
 
-.header-center { text-align: center; flex: 1; padding: 0 12px; }
-.header-patient-name { font-size: 13px; font-weight: 600; color: var(--text-primary); }
-.header-patient-sub  { font-size: 10px; font-weight: 500; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-muted); margin-top: 1px; }
+.header-center { text-align: center; flex: 1; padding: 0 8px; min-width: 0; overflow: hidden; }
+.header-patient-name {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  max-width: 100%;
+}
+.header-patient-name .active-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: var(--accent);
+  background: var(--accent-light);
+  border: 1px solid var(--accent-border);
+  border-radius: 20px;
+  padding: 2px 8px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.header-patient-name .active-badge::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  flex-shrink: 0;
+}
 
 .header-gear {
   width: 38px; height: 38px;

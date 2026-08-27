@@ -383,7 +383,7 @@ function AppMain({ currentUser, authToken, onLogout }) {
           </div>
           {phase !== 'idle' && (
             <div className="header-center">
-              <div className="header-patient-name">{activePatient ? activePatient.name : 'New Patient'} — Active</div>
+              <div className="header-patient-name"><span style={{overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{activePatient ? activePatient.name : 'New Patient'}</span><span className="active-badge">Active</span></div>
               <div className="center-orb-wrapper">
                 <AudioVisualizer stream={recRef.current?.stream} isActive={phase === 'recording'} />
               </div>
@@ -655,7 +655,7 @@ function AppMain({ currentUser, authToken, onLogout }) {
         </div>
         {phase !== 'idle' && (
           <div className="header-center">
-            <div className="header-patient-name">{activePatient ? activePatient.name : 'New Patient'} — Active</div>
+            <div className="header-patient-name"><span style={{overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{activePatient ? activePatient.name : 'New Patient'}</span><span className="active-badge">Active</span></div>
             <div className="center-orb-wrapper">
               <AudioVisualizer stream={recRef.current?.stream} isActive={phase === 'recording'} />
             </div>
