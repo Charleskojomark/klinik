@@ -34,6 +34,7 @@ Thumbs.db
 
 # Model cache
 /models/
+models/
 
 # Temp DB files
 data/*.db-shm
@@ -41,3 +42,6 @@ data/*.db-wal
 
 # Build/temp tools
 .bob/
+
+# Vercel
+.vercel
