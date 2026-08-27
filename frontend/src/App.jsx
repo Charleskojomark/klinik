@@ -781,6 +781,7 @@ function AppMain({ currentUser, authToken, onLogout }) {
             setActivePatient={setActivePatient}
             onBack={() => setPage('home')}
             refreshPatients={fetchPatients}
+            authFetch={authFetch}
           />
         )}
 

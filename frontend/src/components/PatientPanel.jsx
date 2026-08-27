@@ -27,7 +27,7 @@ const IconPhone = () => (
   </svg>
 )
 
-export default function PatientPanel({ patients, activePatient, setActivePatient, onBack, refreshPatients }) {
+export default function PatientPanel({ patients, activePatient, setActivePatient, onBack, refreshPatients, authFetch }) {
   const [tab, setTab] = useState('history')
   const [patientDetails, setPatientDetails] = useState(null)
   const [loading, setLoading] = useState(false)
@@ -36,7 +36,7 @@ export default function PatientPanel({ patients, activePatient, setActivePatient
   useEffect(() => {
     if (activePatient) {
       setLoading(true)
-      fetch(`${API}/patients/${activePatient.id}`)
+      authFetch(`${API}/patients/${activePatient.id}`)
         .then(r => r.json())
         .then(data => {
           setPatientDetails(data)

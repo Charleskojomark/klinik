@@ -121,12 +121,16 @@ async def llm_chat(
     ]
 
     try:
-        response = await llm_client.chat.completions.create(
-            model=settings.llm_model,
-            messages=messages,
-            temperature=temperature,
-            max_tokens=max_tokens,
-        )
+        kwargs = {
+            "model": settings.llm_model,
+            "messages": messages,
+            "temperature": temperature,
+            "max_tokens": max_tokens,
+        }
+        if json_mode:
+            kwargs["response_format"] = {"type": "json_object"}
+
+        response = await llm_client.chat.completions.create(**kwargs)
         result = response.choices[0].message.content
 
         if json_mode:
