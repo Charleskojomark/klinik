@@ -15,11 +15,16 @@ function getStoredUser() {
 function getStoredToken() {
   return localStorage.getItem('klinik_token') || null
 }
+const BASE_URL = import.meta.env.VITE_API_URL || ''
 function makeAuthFetch(token) {
-  return (url, opts = {}) => fetch(url, {
-    ...opts,
-    headers: { ...(opts.headers || {}), Authorization: `Bearer ${token}` },
-  })
+  return (url, opts = {}) => {
+    // Prepend backend base URL if the path is relative (starts with /)
+    const fullUrl = url.startsWith('/') ? `${BASE_URL}${url}` : url
+    return fetch(fullUrl, {
+      ...opts,
+      headers: { ...(opts.headers || {}), Authorization: `Bearer ${token}` },
+    })
+  }
 }
 
 const AGENTS = [
