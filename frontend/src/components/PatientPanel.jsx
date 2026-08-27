@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 
-const API = '/api'
+const API = import.meta.env.VITE_API_URL || '/api'
 
 const IconChevronLeft = () => (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{width:16,height:16}}>

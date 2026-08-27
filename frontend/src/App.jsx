@@ -6,7 +6,7 @@ import CitLReview from './components/CitLReview.jsx'
 import LoginScreen from './components/LoginScreen.jsx'
 import AuditLogsPage from './components/AuditLogsPage.jsx'
 
-const API = '/api'
+const API = import.meta.env.VITE_API_URL || '/api'
 
 // ── Auth helpers ──
 function getStoredUser() {
